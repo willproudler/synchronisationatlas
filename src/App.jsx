@@ -1271,6 +1271,7 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 
       {activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
       {activeTab==="cipher"&&<CipherLab bp={bp}/>}
+      {activeTab==="compare"&&<CompareLab bp={bp}/>}
       {activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
 
       <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:`1px solid ${c.borderS}`,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>

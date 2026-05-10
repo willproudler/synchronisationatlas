@@ -2527,7 +2527,7 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
   return<><link href={fontUrl}rel="stylesheet"/><style>{`*{box-sizing:border-box;margin:0;padding:0}body{background:${c.bg}}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}::selection{background:${c.text}22}select option{background:${c.surface};color:${c.text}}`}</style>
   <div style={{minHeight:"100vh",color:c.text,background:c.bg,...f.monoLight}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",opacity:0.025,backgroundImage:`url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,backgroundRepeat:"repeat"}}/>
-<div style={{maxWidth:activeTab==="demons"?1760:1440,margin:"0 auto",padding:`${mainPad*1.2}px ${mainPad}px`}}>
+<div style={{maxWidth:activeTab==="demons"?1760:1560,margin:"0 auto",padding:`${mainPad}px ${mainPad}px`}}>
       {/* Header */}
       <div style={{marginBottom:bp.isMobile?32:56}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}><span style={{...f.mono,fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",color:c.dim,padding:"5px 12px",border:`1px solid ${c.border}`,borderRadius:4}}>Synchronisation Atlas</span><span style={{...f.mono,fontSize:11,color:c.dim}}>v4</span></div>

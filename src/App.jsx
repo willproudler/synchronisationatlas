@@ -1437,6 +1437,9 @@ function ChainBuilder({bp}){
   const [selected,setSelected]=useState("Tokhatto");
   const [chainName,setChainName]=useState("Tokhatto Descent with Lurgo Seed");
   const [copied,setCopied]=useState(false);
+  const [tagInput,setTagInput]=useState("Soft Control, Lurgo Kernel");
+  const [notes,setNotes]=useState("");
+  const [savedMsg,setSavedMsg]=useState("");
 
   const analysis=useMemo(()=>analyzeDemonChain(chain),[chain]);
   const pad=bp.isMobile?18:28;
@@ -1462,7 +1465,21 @@ function ChainBuilder({bp}){
       return next;
     });
   }
+function saveToGrimoire(){
+  const existing=loadSavedReadings();
+  const reading=createSavedReading({
+    name:chainName,
+    chain,
+    tags:parseTagsInput(tagInput),
+    notes,
+    analysis
+  });
 
+  const next=[reading,...existing];
+  saveReadingsToStorage(next);
+  setSavedMsg("Saved to Grimoire");
+  setTimeout(()=>setSavedMsg(""),1600);
+}
   async function copyExport(){
     const text=makeChainExport(chainName,analysis);
     try{
@@ -1544,7 +1561,48 @@ function ChainBuilder({bp}){
               }}
             />
           </Section>
+<Section label="Tags" style={{marginTop:22}}>
+  <input
+    value={tagInput}
+    onChange={e=>setTagInput(e.target.value)}
+    placeholder="Soft Control, Luke, Charisma, 1890"
+    style={{
+      ...f.mono,
+      fontSize:14,
+      width:"100%",
+      padding:"14px 16px",
+      borderRadius:14,
+      border:`1px solid ${c.border}`,
+      background:c.bg,
+      color:c.text,
+      outline:"none",
+      marginTop:8
+    }}
+  />
+</Section>
 
+<Section label="Notes" style={{marginTop:22}}>
+  <textarea
+    value={notes}
+    onChange={e=>setNotes(e.target.value)}
+    placeholder="What did this chain reveal?"
+    rows={4}
+    style={{
+      ...f.monoLight,
+      fontSize:14,
+      width:"100%",
+      padding:"14px 16px",
+      borderRadius:14,
+      border:`1px solid ${c.border}`,
+      background:c.bg,
+      color:c.text,
+      outline:"none",
+      resize:"vertical",
+      lineHeight:1.6,
+      marginTop:8
+    }}
+  />
+</Section>
           <Section label="Add demon" style={{marginTop:22}}>
             <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr auto",gap:10,marginTop:8}}>
               <select
@@ -1761,11 +1819,14 @@ function ChainBuilder({bp}){
               </div>
             </div>
 
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
-              <Pill active onClick={copyExport}>
-                {copied ? "Copied" : "Copy reading"}
-              </Pill>
-            </div>
+           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
+  <Pill active onClick={copyExport}>
+    {copied ? "Copied" : "Copy reading"}
+  </Pill>
+  <Pill active onClick={saveToGrimoire}>
+    {savedMsg || "Save to Grimoire"}
+  </Pill>
+</div>
           </div>
         </Panel>
 
@@ -1896,6 +1957,467 @@ function ChainBuilder({bp}){
       </div>
     </div>
   );
+}function Grimoire({bp}){
+  const [readings,setReadings]=useState([]);
+  const [query,setQuery]=useState("");
+  const [tagFilter,setTagFilter]=useState("all");
+  const [activeId,setActiveId]=useState(null);
+  const [copied,setCopied]=useState(false);
+  const pad=bp.isMobile?18:28;
+
+  useEffect(()=>{
+    const loaded=loadSavedReadings();
+    setReadings(loaded);
+    if(loaded[0]) setActiveId(loaded[0].id);
+  },[]);
+
+  function persist(next){
+    setReadings(next);
+    saveReadingsToStorage(next);
+  }
+
+  function deleteReading(id){
+    const next=readings.filter(r=>r.id!==id);
+    persist(next);
+    if(activeId===id) setActiveId(next[0]?.id || null);
+  }
+
+  async function copyReading(reading){
+    try{
+      await navigator.clipboard.writeText(reading.exportText || "");
+      setCopied(true);
+      setTimeout(()=>setCopied(false),1400);
+    }catch(e){
+      setCopied(false);
+    }
+  }
+
+  function exportAll(){
+    const text=readings.map(r=>r.exportText || "").join("\n\n---\n\n");
+    const blob=new Blob([text],{type:"text/plain"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="synchronisation-atlas-grimoire.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importJsonFile(e){
+    const file=e.target.files?.[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const parsed=JSON.parse(String(reader.result || "[]"));
+        if(Array.isArray(parsed)){
+          persist(parsed);
+          setActiveId(parsed[0]?.id || null);
+        }
+      }catch(err){
+        alert("Could not import JSON.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function exportJson(){
+    const blob=new Blob([JSON.stringify(readings,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="synchronisation-atlas-grimoire.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const tags=uniqueTagsFromReadings(readings);
+  const visible=readings.filter(r=>readingMatchesSearch(r,query,tagFilter));
+  const active=readings.find(r=>r.id===activeId) || visible[0] || null;
+
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:bp.isDesktop?"0.9fr 1.1fr":"1fr",
+      gap:20,
+      alignItems:"start"
+    }}>
+      <Panel>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
+          <div style={{...f.serif,fontSize:bp.isMobile?26:30,color:c.text}}>
+            Grimoire
+          </div>
+          <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8,lineHeight:1.7}}>
+            Saved chains, project tags, route kernels, and working notes.
+          </div>
+        </div>
+
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
+          <input
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            placeholder="Search readings, demons, tags, kernels…"
+            style={{
+              ...f.mono,
+              fontSize:14,
+              width:"100%",
+              padding:"14px 16px",
+              borderRadius:14,
+              border:`1px solid ${c.border}`,
+              background:c.bg,
+              color:c.text,
+              outline:"none"
+            }}
+          />
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+            <Pill active={tagFilter==="all"} onClick={()=>setTagFilter("all")}>
+              All tags
+            </Pill>
+            {tags.map(t=>(
+              <Pill key={t} active={tagFilter===t} onClick={()=>setTagFilter(t)}>
+                {t}
+              </Pill>
+            ))}
+          </div>
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
+            <Pill onClick={exportAll}>Export TXT</Pill>
+            <Pill onClick={exportJson}>Export JSON</Pill>
+            <label style={{
+              ...f.mono,
+              fontSize:12,
+              letterSpacing:"0.04em",
+              padding:"7px 16px",
+              borderRadius:100,
+              border:`1px solid ${c.border}`,
+              background:"transparent",
+              color:c.muted,
+              cursor:"pointer"
+            }}>
+              Import JSON
+              <input type="file" accept="application/json" onChange={importJsonFile} style={{display:"none"}}/>
+            </label>
+          </div>
+
+          <Section label={`Readings · ${visible.length}`} style={{marginTop:24}}>
+            <div style={{display:"grid",gap:10,marginTop:10}}>
+              {visible.length ? visible.map(r=>(
+                <div
+                  key={r.id}
+                  onClick={()=>setActiveId(r.id)}
+                  style={{
+                    background:active?.id===r.id?c.raised:c.bg,
+                    border:`1px solid ${active?.id===r.id?c.text:c.borderS}`,
+                    borderRadius:16,
+                    padding:"14px 16px",
+                    cursor:"pointer",
+                    transition:"all 0.2s"
+                  }}
+                >
+                  <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+                    <div>
+                      <div style={{...f.serif,fontSize:21,color:c.text}}>
+                        {r.name}
+                      </div>
+                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:5}}>
+                        Kernel: {r.primaryKernel || "—"} · {new Date(r.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div style={{...f.mono,fontSize:11,color:c.dim}}>
+                      {(r.chain || []).length} demons
+                    </div>
+                  </div>
+
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                    {(r.tags || []).map(t=>(
+                      <span key={t} style={{
+                        ...f.mono,
+                        fontSize:10,
+                        color:c.bg,
+                        background:c.text,
+                        padding:"5px 8px",
+                        borderRadius:999
+                      }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )) : (
+                <InnerPanel>
+                  <Mono style={{fontSize:13}}>No saved readings yet. Save one from Chain Builder.</Mono>
+                </InnerPanel>
+              )}
+            </div>
+          </Section>
+        </div>
+      </Panel>
+
+      <Panel>
+        <div style={{padding:pad}}>
+          {active ? (
+            <>
+              <div style={{display:"flex",justifyContent:"space-between",gap:14,alignItems:"flex-start"}}>
+                <div>
+                  <Label>Saved reading</Label>
+                  <div style={{...f.serif,fontSize:bp.isMobile?30:40,color:c.text,marginTop:8,lineHeight:1.1}}>
+                    {active.name}
+                  </div>
+                  <div style={{...f.monoLight,fontSize:13,color:c.dim,marginTop:10}}>
+                    Created {new Date(active.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
+                <Pill active onClick={()=>copyReading(active)}>
+                  {copied ? "Copied" : "Copy reading"}
+                </Pill>
+                <Pill onClick={()=>deleteReading(active.id)}>
+                  Delete
+                </Pill>
+              </div>
+
+              <Section label="Demon sentence" style={{marginTop:28}}>
+                <InnerPanel>
+                  <div style={{...f.serif,fontSize:24,color:c.text,lineHeight:1.35}}>
+                    {(active.chain || []).join(" → ") || "—"}
+                  </div>
+                </InnerPanel>
+              </Section>
+
+              <Section label="Tags" style={{marginTop:22}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                  {(active.tags || []).length ? active.tags.map(t=>(
+                    <Pill key={t} active onClick={()=>setTagFilter(t)}>
+                      {t}
+                    </Pill>
+                  )) : <Mono style={{fontSize:13}}>—</Mono>}
+                </div>
+              </Section>
+
+              <Section label="Primary kernel" style={{marginTop:22}}>
+                <div style={{...f.serif,fontSize:36,color:c.text,marginTop:8}}>
+                  {active.primaryKernel || "—"}
+                </div>
+              </Section>
+
+              <Section label="State-flow" style={{marginTop:22}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                  {(active.stateFlow || []).map((x,i)=>(
+                    <div key={`${x.demon}-${i}`} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <span style={{
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        border:`1px solid ${c.border}`,
+                        borderRadius:10,
+                        color:c.muted,
+                        background:c.bg
+                      }}>
+                        {x.demon}
+                      </span>
+                      <span style={{
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        borderRadius:10,
+                        color:c.bg,
+                        background:x.color || c.text
+                      }}>
+                        {x.stateName}
+                      </span>
+                      {i < (active.stateFlow || []).length-1 && (
+                        <span style={{...f.mono,color:c.dim,fontSize:12}}>→</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+
+              <Section label="Notes" style={{marginTop:22}}>
+                <InnerPanel>
+                  <div style={{...f.monoLight,fontSize:14,color:c.muted,lineHeight:1.8,whiteSpace:"pre-wrap"}}>
+                    {active.notes || "—"}
+                  </div>
+                </InnerPanel>
+              </Section>
+
+              <Section label="Route stack" style={{marginTop:22}}>
+                {(active.routeEntries || []).length ? active.routeEntries.map((e,i)=>(
+                  <InnerPanel key={`${e.demon}-${e.code}-${i}`} style={{marginTop:10}}>
+                    <Label>Mesh {e.mesh} · [{e.code}]</Label>
+                    <div style={{...f.serif,fontSize:21,color:c.text,marginTop:7}}>
+                      {e.demon}
+                    </div>
+                    <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:6}}>
+                      {e.title}
+                    </div>
+                  </InnerPanel>
+                )) : (
+                  <InnerPanel><Mono style={{fontSize:13}}>No route stack.</Mono></InnerPanel>
+                )}
+              </Section>
+
+              <Section label="Shared fragments" style={{marginTop:22}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                  {(active.sharedFragments || []).slice(0,16).map(frag=>(
+                    <Pill key={frag.frag}>
+                      {frag.frag} · {frag.count}
+                    </Pill>
+                  ))}
+                </div>
+              </Section>
+            </>
+          ) : (
+            <InnerPanel>
+              <div style={{...f.monoLight,fontSize:14,color:c.dim,lineHeight:1.7}}>
+                No saved reading selected.
+              </div>
+            </InnerPanel>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}function PatternFinder({bp}){
+  const [readings,setReadings]=useState([]);
+  const [tagFilter,setTagFilter]=useState("all");
+  const pad=bp.isMobile?18:28;
+
+  useEffect(()=>{
+    setReadings(loadSavedReadings());
+  },[]);
+
+  const tags=uniqueTagsFromReadings(readings);
+  const filtered=tagFilter==="all" ? readings : readings.filter(r=>(r.tags || []).includes(tagFilter));
+  const patterns=useMemo(()=>analyzeSavedPatterns(filtered),[filtered]);
+
+  function RankingPanel({label,items,empty="No data yet."}){
+    return (
+      <Panel>
+        <div style={{padding:pad}}>
+          <Label>{label}</Label>
+          <div style={{display:"grid",gap:10,marginTop:14}}>
+            {items.length ? items.slice(0,12).map((item,i)=>(
+              <div key={item.name} style={{
+                background:c.bg,
+                border:`1px solid ${c.borderS}`,
+                borderRadius:14,
+                padding:"13px 15px"
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center"}}>
+                  <div style={{display:"flex",gap:10,alignItems:"center",minWidth:0}}>
+                    <span style={{
+                      ...f.mono,
+                      fontSize:11,
+                      width:28,
+                      height:28,
+                      borderRadius:9,
+                      display:"flex",
+                      alignItems:"center",
+                      justifyContent:"center",
+                      background:c.raised,
+                      color:c.dim,
+                      flexShrink:0
+                    }}>
+                      {i+1}
+                    </span>
+                    <span style={{
+                      ...f.serif,
+                      fontSize:20,
+                      color:c.text,
+                      overflow:"hidden",
+                      textOverflow:"ellipsis"
+                    }}>
+                      {item.name}
+                    </span>
+                  </div>
+                  <span style={{
+                    ...f.mono,
+                    fontSize:12,
+                    color:c.bg,
+                    background:c.text,
+                    borderRadius:999,
+                    padding:"5px 9px",
+                    flexShrink:0
+                  }}>
+                    {item.count}
+                  </span>
+                </div>
+                <div style={{marginTop:10}}>
+                  <Bar value={Math.min(100,(item.count / Math.max(1,items[0].count))*100)} color={c.text}/>
+                </div>
+              </div>
+            )) : (
+              <InnerPanel>
+                <Mono style={{fontSize:13}}>{empty}</Mono>
+              </InnerPanel>
+            )}
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <div>
+      <Panel style={{marginBottom:20}}>
+        <div style={{padding:pad}}>
+          <div style={{...f.serif,fontSize:bp.isMobile?28:36,color:c.text}}>
+            Pattern Finder
+          </div>
+          <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:10,lineHeight:1.7}}>
+            Attractor index across saved readings. Finds repeated kernels, demons, states, routes, tags, and state-endings.
+          </div>
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
+            <Pill active={tagFilter==="all"} onClick={()=>setTagFilter("all")}>
+              All readings · {readings.length}
+            </Pill>
+            {tags.map(t=>(
+              <Pill key={t} active={tagFilter===t} onClick={()=>setTagFilter(t)}>
+                {t}
+              </Pill>
+            ))}
+          </div>
+        </div>
+      </Panel>
+
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:bp.isDesktop?"repeat(3,1fr)":bp.isTablet?"1fr 1fr":"1fr",
+        gap:20
+      }}>
+        <RankingPanel label="Kernels" items={patterns.kernels}/>
+        <RankingPanel label="Demons" items={patterns.demons}/>
+        <RankingPanel label="Route fragments" items={patterns.fragments}/>
+        <RankingPanel label="States" items={patterns.states}/>
+        <RankingPanel label="State endings" items={patterns.endings}/>
+        <RankingPanel label="Routes" items={patterns.routes}/>
+        <RankingPanel label="Tags" items={patterns.tags}/>
+      </div>
+
+      <Panel style={{marginTop:20}}>
+        <div style={{padding:pad}}>
+          <Label>Reading</Label>
+          <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:12,lineHeight:1.8}}>
+            {filtered.length ? (
+              <>
+                Across <span style={{color:c.text}}>{filtered.length}</span> saved readings,
+                the strongest kernel is <span style={{color:c.text}}>{patterns.kernels[0]?.name || "—"}</span>,
+                the most recurring demon is <span style={{color:c.text}}>{patterns.demons[0]?.name || "—"}</span>,
+                and the strongest state-ending is <span style={{color:c.text}}>{patterns.endings[0]?.name || "—"}</span>.
+              </>
+            ) : (
+              <>Save readings in the Grimoire to generate an attractor index.</>
+            )}
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
 }
 // ── DIAGNOSIS WORKBENCH ───────────────────────────────────────────
 
@@ -2003,12 +2525,13 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 </div>
       </div>}
 
-     {activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
+{activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
 {activeTab==="cipher"&&<CipherLab bp={bp}/>}
 {activeTab==="compare"&&<CompareLab bp={bp}/>}
 {activeTab==="chain"&&<ChainBuilder bp={bp}/>}
+{activeTab==="grimoire"&&<Grimoire bp={bp}/>}
+{activeTab==="patterns"&&<PatternFinder bp={bp}/>}
 {activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
-
       <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:`1px solid ${c.borderS}`,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>
     </div>
   </div></>;

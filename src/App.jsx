@@ -363,6 +363,7 @@ function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)return`M 
 function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[s.id]=demonGraph.filter(d=>d.state===s.id);});const pos={};Object.values(states).forEach(s=>{const c=by[s.id]||[];const r=s.id==="liminal"?88:76;c.forEach((d,i)=>{const a=(Math.PI*2/Math.max(c.length,1))*i-Math.PI/2;pos[d.id]={x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r+40};});});return pos;}
 function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
 
+<<<<<<< HEAD
 
 const GRIMOIRE_STORAGE_KEY="synchronisation_atlas_grimoire_v1";
 
@@ -494,6 +495,8 @@ function readingMatchesSearch(reading,query,tagFilter){
 
   return hay.includes(q);
 }
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 // ── STYLE SYSTEM ──────────────────────────────────────────────────
 
 const fontUrl="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap";
@@ -513,25 +516,12 @@ function InnerPanel({children,style:s}){return<div style={{background:c.bg,borde
 // ── TAB BAR ───────────────────────────────────────────────────────
 
 const tabDefs=[
-
   {id:"atlas",label:"States"},
-
   {id:"demons",label:"Demons"},
-
   {id:"routes",label:"Routes"},
-
   {id:"cipher",label:"Cipher Lab"},
-
   {id:"compare",label:"Compare Lab"},
-
-  {id:"chain",label:"Chain Builder"},
-
-  {id:"grimoire",label:"Grimoire"},
-
-  {id:"patterns",label:"Patterns"},
-
   {id:"diagnosis",label:"Locate"}
-
 ];
 function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
 
@@ -1307,7 +1297,10 @@ function CompareLab({bp}){
     </div>
   );
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 // ── DIAGNOSIS WORKBENCH ───────────────────────────────────────────
 
 function DiagnosisWorkbench({onJump,onOpenDemon,bp}){

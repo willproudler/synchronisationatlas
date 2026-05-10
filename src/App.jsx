@@ -77,6 +77,83 @@ function normalizeName(n){return n.toLowerCase().replace(/[^a-z0-9]+/g," ").trim
 function scoreStates(sel,q){const qn=normalizeName(q);const sc=Object.values(states).map(st=>{let s=0;sel.forEach(x=>{s+=stateWeights[st.id]?.[x]||0;});if(qn){const t=[st.name,st.region,st.function,st.signature,...st.body,...st.cues,...st.demons,st.corruption,st.grace].join(" ").toLowerCase();if(t.includes(qn))s+=4;if(st.name.toLowerCase().includes(qn))s+=4;if(st.demons.some(d=>d.toLowerCase().includes(qn)))s+=3;}return{stateId:st.id,score:s};});sc.sort((a,b)=>b.score-a.score);return{best:sc[0]?.score>0?sc[0]:null,second:sc[1]?.score>0?sc[1]:null,confidence:sc[0]?.score?Math.min(100,Math.round((sc[0].score/16)*100)):0};}
 function getCurvePath(from,to,bend=26){if(from.id===to.id){const r=34;return`M ${from.x-16} ${from.y-34} A ${r} ${r} 0 1 1 ${from.x+16} ${from.y-34}`;}const dx=to.x-from.x,dy=to.y-from.y,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;return`M ${from.x+nx*42} ${from.y+ny*42} Q ${(from.x+nx*42+to.x-nx*42)/2-ny*bend} ${(from.y+ny*42+to.y-ny*42)/2+nx*bend} ${to.x-nx*42} ${to.y-ny*42}`;}
 function parseRouteCode(c){if(!c||c==="X"||c==="?")return[];return String(c).split("").filter(x=>routeDigitAnchors[x]).map(d=>({digit:d,...routeDigitAnchors[d]}));}
+function getAllRouteEntries(){
+  return Object.entries(routeOracle).flatMap(([demon, routes]) =>
+    routes.map(route => ({
+      demon,
+      code: route.code,
+      title: route.title,
+      text: route.text,
+      mesh: demons[demon]?.mesh || "—",
+      state: demonGraph.find(d => d.id === demon)?.state || "—",
+    }))
+  );
+}
+
+function analyzeRouteInput(input){
+  const raw = String(input || "").trim();
+  const cleaned = raw.replace(/[^0-9X?]/g, "");
+  const entries = getAllRouteEntries();
+
+  if(!cleaned){
+    return {
+      cleaned: "",
+      exact: [],
+      contains: [],
+      containedBy: [],
+      sameTerminal: [],
+      fragments: []
+    };
+  }
+
+  const exact = entries.filter(e => e.code === cleaned);
+
+  const contains = entries.filter(e =>
+    e.code !== cleaned &&
+    e.code !== "X" &&
+    e.code !== "?" &&
+    cleaned.includes(e.code)
+  ).sort((a,b) => b.code.length - a.code.length);
+
+  const containedBy = entries.filter(e =>
+    e.code !== cleaned &&
+    e.code !== "X" &&
+    e.code !== "?" &&
+    e.code.includes(cleaned)
+  ).sort((a,b) => a.code.length - b.code.length);
+
+  const terminal = cleaned.slice(-4);
+  const sameTerminal = terminal.length >= 2
+    ? entries.filter(e =>
+        e.code !== cleaned &&
+        e.code !== "X" &&
+        e.code !== "?" &&
+        e.code.endsWith(terminal)
+      )
+    : [];
+
+  const fragments = [];
+  for(let i=0;i<cleaned.length;i++){
+    for(let j=i+2;j<=cleaned.length;j++){
+      const frag = cleaned.slice(i,j);
+      const matches = entries.filter(e => e.code === frag);
+      if(matches.length){
+        fragments.push({ frag, start:i, end:j, matches });
+      }
+    }
+  }
+
+  fragments.sort((a,b) => b.frag.length - a.frag.length || a.start - b.start);
+
+  return {
+    cleaned,
+    exact,
+    contains,
+    containedBy,
+    sameTerminal,
+    fragments
+  };
+}
 function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)return`M ${pts[0].x} ${pts[0].y}`;let r=`M ${pts[0].x} ${pts[0].y}`;for(let i=1;i<pts.length;i++){r+=` Q ${(pts[i-1].x+pts[i].x)/2} ${(pts[i-1].y+pts[i].y)/2} ${pts[i].x} ${pts[i].y}`;}return r;}
 function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[s.id]=demonGraph.filter(d=>d.state===s.id);});const pos={};Object.values(states).forEach(s=>{const c=by[s.id]||[];const r=s.id==="liminal"?88:76;c.forEach((d,i)=>{const a=(Math.PI*2/Math.max(c.length,1))*i-Math.PI/2;pos[d.id]={x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r+40};});});return pos;}
 function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
@@ -276,7 +353,225 @@ function NumogramRoutesLab({bp}){
     <Panel style={{flex:1}}><div style={{padding:pad}}>{sr?<><Label>Route [{sr.code}]</Label><div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>{sr.title}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>{sr.text}</div><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>{String(sr.code).split("").map((ch,i)=><span key={i}style={{...f.mono,fontSize:14,width:34,height:34,display:"inline-flex",alignItems:"center",justifyContent:"center",border:`1px solid ${c.border}`,borderRadius:10,color:c.muted}}>{ch}</span>)}</div></>:<Mono style={{fontSize:13}}>No route selected.</Mono>}</div></Panel>
   </div></div>;
 }
+function CipherLab({bp}){
+  const [input,setInput]=useState("541890");
+  const result=useMemo(()=>analyzeRouteInput(input),[input]);
+  const pts=parseRouteCode(result.cleaned);
+  const rp=buildRoutePath(pts);
+  const pad=bp.isMobile?18:28;
 
+  function RouteCard({entry,label}){
+    const st=states[entry.state];
+    return (
+      <InnerPanel style={{marginTop:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+          <div>
+            <Label>{label} · Mesh {entry.mesh} · Route [{entry.code}]</Label>
+            <div style={{...f.serif,fontSize:22,color:c.text,marginTop:8}}>
+              {entry.demon}
+            </div>
+            <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:6}}>
+              {entry.title}
+            </div>
+          </div>
+          {st && (
+            <div style={{
+              width:10,
+              height:10,
+              borderRadius:"50%",
+              background:st.color,
+              boxShadow:`0 0 18px ${st.color}55`,
+              marginTop:5,
+              flexShrink:0
+            }}/>
+          )}
+        </div>
+        <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:12,lineHeight:1.7}}>
+          {entry.text}
+        </div>
+      </InnerPanel>
+    );
+  }
+
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:bp.isDesktop?"620px 1fr":"1fr",
+      gap:20,
+      alignItems:"start"
+    }}>
+      <Panel>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
+          <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
+            Cipher Lab
+          </div>
+          <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>
+            Type a route number and reveal exact, embedded, terminal, and carrier demons.
+          </div>
+        </div>
+
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
+          <input
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            placeholder="541890"
+            style={{
+              ...f.mono,
+              fontSize:18,
+              width:"100%",
+              padding:"16px 18px",
+              borderRadius:14,
+              border:`1px solid ${c.border}`,
+              background:c.bg,
+              color:c.text,
+              outline:"none",
+              letterSpacing:"0.08em"
+            }}
+          />
+
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:14}}>
+            {["1890","541890","41890","71890","271890","72541890","89","890"].map(x=>(
+              <Pill key={x} active={result.cleaned===x} onClick={()=>setInput(x)}>
+                {x}
+              </Pill>
+            ))}
+          </div>
+
+          <div style={{marginTop:18}}>
+            <svg
+              viewBox="0 0 1000 2050"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                width:"100%",
+                display:"block",
+                borderRadius:14,
+                background:"#000000"
+              }}
+            >
+              <image
+                href="/Numogram-blackgreen.jpg"
+                x="50"
+                y="50"
+                width="900"
+                height="1950"
+                preserveAspectRatio="xMidYMid meet"
+              />
+
+              {rp && (
+                <>
+                  <path
+                    d={rp}
+                    fill="none"
+                    stroke="#FF6B1A"
+                    strokeWidth={22}
+                    strokeLinecap="round"
+                    strokeOpacity={0.18}
+                  />
+                  <path
+                    d={rp}
+                    fill="none"
+                    stroke="#FF8838"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray="11 9"
+                    strokeOpacity={0.95}
+                  >
+                    <animate
+                      attributeName="stroke-dashoffset"
+                      from="0"
+                      to="-40"
+                      dur="1.6s"
+                      repeatCount="indefinite"
+                    />
+                  </path>
+                </>
+              )}
+
+              {pts.map((pt,i)=>(
+                <g key={`${pt.digit}-${i}`}>
+                  <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}/>
+                  <circle cx={pt.x} cy={pt.y} r={14} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text
+                    x={pt.x}
+                    y={pt.y+5}
+                    textAnchor="middle"
+                    fontSize={14}
+                    fill="#0C0C0B"
+                    style={{...f.mono,fontWeight:600}}
+                  >
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
+      </Panel>
+
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        <Panel>
+          <div style={{padding:pad}}>
+            <Label>Cleaned route</Label>
+            <div style={{...f.serif,fontSize:34,color:c.text,marginTop:8}}>
+              {result.cleaned || "—"}
+            </div>
+
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:16}}>
+              {result.cleaned.split("").map((ch,i)=>(
+                <span key={`${ch}-${i}`} style={{
+                  ...f.mono,
+                  fontSize:14,
+                  width:36,
+                  height:36,
+                  display:"inline-flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  border:`1px solid ${c.border}`,
+                  borderRadius:10,
+                  color:c.muted
+                }}>
+                  {ch}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="Exact match">
+              {result.exact.length
+                ? result.exact.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Exact"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No exact match.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Embedded inside this route" style={{marginTop:24}}>
+              {result.contains.length
+                ? result.contains.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Embedded"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No embedded route found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Routes that contain this route" style={{marginTop:24}}>
+              {result.containedBy.length
+                ? result.containedBy.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Carrier"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No larger carrier route found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Same terminal pattern" style={{marginTop:24}}>
+              {result.sameTerminal.length
+                ? result.sameTerminal.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Terminal resonance"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No terminal resonance found.</Mono></InnerPanel>
+              }
+            </Section>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
 // ── DIAGNOSIS WORKBENCH ───────────────────────────────────────────
 
 function DiagnosisWorkbench({onJump,onOpenDemon,bp}){
@@ -384,6 +679,7 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
       </div>}
 
       {activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
+      {activeTab==="cipher"&&<CipherLab bp={bp}/>}
       {activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
 
       <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:`1px solid ${c.borderS}`,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>

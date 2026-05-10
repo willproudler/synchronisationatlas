@@ -364,6 +364,7 @@ function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[
 function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 const GRIMOIRE_STORAGE_KEY="synchronisation_atlas_grimoire_v1";
 
@@ -495,6 +496,8 @@ function readingMatchesSearch(reading,query,tagFilter){
 
   return hay.includes(q);
 }
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 =======
 >>>>>>> parent of 40e4fdf (Update App.jsx)
 // ── STYLE SYSTEM ──────────────────────────────────────────────────
@@ -1298,7 +1301,10 @@ function CompareLab({bp}){
   );
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 =======
 >>>>>>> parent of 40e4fdf (Update App.jsx)
 // ── DIAGNOSIS WORKBENCH ───────────────────────────────────────────

@@ -365,6 +365,7 @@ function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 const GRIMOIRE_STORAGE_KEY="synchronisation_atlas_grimoire_v1";
 
@@ -496,6 +497,8 @@ function readingMatchesSearch(reading,query,tagFilter){
 
   return hay.includes(q);
 }
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 =======
 >>>>>>> parent of 40e4fdf (Update App.jsx)
 =======
@@ -1302,7 +1305,10 @@ function CompareLab({bp}){
 }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 
+=======
+>>>>>>> parent of 40e4fdf (Update App.jsx)
 =======
 >>>>>>> parent of 40e4fdf (Update App.jsx)
 =======

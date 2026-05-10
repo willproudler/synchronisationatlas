@@ -66,7 +66,7 @@ const routeDigitAnchors = {
 
  
 // Build a wedge path: from one endpoint widening to the other,
-// curved by bend. Uses two cubic curves forming a leaf/tongue shape.
+// curved by `bend`. Uses two cubic curves forming a leaf/tongue shape.
 
 const allSymptoms = Array.from(new Set(Object.values(states).flatMap(s => s.body)));
 
@@ -74,7 +74,7 @@ const allSymptoms = Array.from(new Set(Object.values(states).flatMap(s => s.body
 
 function normalizeName(n){return n.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
 function scoreStates(sel,q){const qn=normalizeName(q);const sc=Object.values(states).map(st=>{let s=0;sel.forEach(x=>{s+=stateWeights[st.id]?.[x]||0;});if(qn){const t=[st.name,st.region,st.function,st.signature,...st.body,...st.cues,...st.demons,st.corruption,st.grace].join(" ").toLowerCase();if(t.includes(qn))s+=4;if(st.name.toLowerCase().includes(qn))s+=4;if(st.demons.some(d=>d.toLowerCase().includes(qn)))s+=3;}return{stateId:st.id,score:s};});sc.sort((a,b)=>b.score-a.score);return{best:sc[0]?.score>0?sc[0]:null,second:sc[1]?.score>0?sc[1]:null,confidence:sc[0]?.score?Math.min(100,Math.round((sc[0].score/16)*100)):0};}
-function getCurvePath(from,to,bend=26){if(from.id===to.id){const r=34;returnM ${from.x-16} ${from.y-34} A ${r} ${r} 0 1 1 ${from.x+16} ${from.y-34};}const dx=to.x-from.x,dy=to.y-from.y,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;returnM ${from.x+nx*42} ${from.y+ny*42} Q ${(from.x+nx*42+to.x-nx*42)/2-ny*bend} ${(from.y+ny*42+to.y-ny*42)/2+nx*bend} ${to.x-nx*42} ${to.y-ny*42};}
+function getCurvePath(from,to,bend=26){if(from.id===to.id){const r=34;return`M ${from.x-16} ${from.y-34} A ${r} ${r} 0 1 1 ${from.x+16} ${from.y-34}`;}const dx=to.x-from.x,dy=to.y-from.y,dist=Math.sqrt(dx*dx+dy*dy),nx=dx/dist,ny=dy/dist;return`M ${from.x+nx*42} ${from.y+ny*42} Q ${(from.x+nx*42+to.x-nx*42)/2-ny*bend} ${(from.y+ny*42+to.y-ny*42)/2+nx*bend} ${to.x-nx*42} ${to.y-ny*42}`;}
 function parseRouteCode(c){if(!c||c==="X"||c==="?")return[];return String(c).split("").filter(x=>routeDigitAnchors[x]).map(d=>({digit:d,...routeDigitAnchors[d]}));}
 function getAllRouteEntries(){
   return Object.entries(routeOracle).flatMap(([demon, routes]) =>
@@ -358,9 +358,9 @@ function compareInputs(aInput,bInput){
     bPrefix:B.codes.map(code=>({code,prefix:getPrefixDifference(code,primaryTerminal)}))
   };
 }
-function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)returnM ${pts[0].x} ${pts[0].y};let r=M ${pts[0].x} ${pts[0].y};for(let i=1;i<pts.length;i++){r+= Q ${(pts[i-1].x+pts[i].x)/2} ${(pts[i-1].y+pts[i].y)/2} ${pts[i].x} ${pts[i].y};}return r;}
+function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)return`M ${pts[0].x} ${pts[0].y}`;let r=`M ${pts[0].x} ${pts[0].y}`;for(let i=1;i<pts.length;i++){r+=` Q ${(pts[i-1].x+pts[i].x)/2} ${(pts[i-1].y+pts[i].y)/2} ${pts[i].x} ${pts[i].y}`;}return r;}
 function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[s.id]=demonGraph.filter(d=>d.state===s.id);});const pos={};Object.values(states).forEach(s=>{const c=by[s.id]||[];const r=s.id==="liminal"?88:76;c.forEach((d,i)=>{const a=(Math.PI*2/Math.max(c.length,1))*i-Math.PI/2;pos[d.id]={x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r+40};});});return pos;}
-function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return2::${n-1};if(n<=5)return3::${n-3};if(n<=9)return4::${n-6};if(n<=14)return5::${n-10};if(n<=20)return6::${n-15};if(n<=27)return7::${n-21};if(n<=35)return8::${n-28};return9::${n-36};}
+function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
 
 function getDemonRouteEntries(demonName){
   return (routeOracle[demonName] || []).map(route => ({
@@ -444,19 +444,19 @@ function makeChainExport(name,analysis){
   const chain=analysis.demons.join(" → ");
 
   const routes=analysis.routeEntries.length
-    ? analysis.routeEntries.map(r=>${r.demon} — ${r.code} — ${r.title}).join("\n")
+    ? analysis.routeEntries.map(r=>`${r.demon} — ${r.code} — ${r.title}`).join("\n")
     : "No registered route entries.";
 
   const states=analysis.stateFlow.length
-    ? analysis.stateFlow.map(x=>${x.demon} — ${x.stateName}).join("\n")
+    ? analysis.stateFlow.map(x=>`${x.demon} — ${x.stateName}`).join("\n")
     : "No state-flow.";
 
   const shared=analysis.sharedFragments.length
-    ? analysis.sharedFragments.slice(0,10).map(x=>${x.frag} (${x.count} hits)).join("\n")
+    ? analysis.sharedFragments.slice(0,10).map(x=>`${x.frag} (${x.count} hits)`).join("\n")
     : "No shared fragments.";
 
   const terminals=analysis.sharedTerminals.length
-    ? analysis.sharedTerminals.slice(0,10).map(x=>${x.terminal} (${x.count} hits)).join("\n")
+    ? analysis.sharedTerminals.slice(0,10).map(x=>`${x.terminal} (${x.count} hits)`).join("\n")
     : "No shared terminal kernels.";
 
   return `CHAIN: ${title}
@@ -480,7 +480,7 @@ SHARED TERMINALS:
 ${terminals}
 
 DIRTY READING:
-${chain || "This chain"} moves through ${analysis.stateSentence || "unregistered state-flow"}. ${analysis.primaryKernel ? Its primary shared kernel is ${analysis.primaryKernel}. : "No dominant shared kernel has been detected yet."}`;
+${chain || "This chain"} moves through ${analysis.stateSentence || "unregistered state-flow"}. ${analysis.primaryKernel ? `Its primary shared kernel is ${analysis.primaryKernel}.` : "No dominant shared kernel has been detected yet."}`;
 }
 const GRIMOIRE_STORAGE_KEY="synchronisation_atlas_grimoire_v1";
 
@@ -505,7 +505,7 @@ function saveReadingsToStorage(readings){
 
 function createSavedReading({name,chain,tags,notes,analysis}){
   return {
-    id:reading_${Date.now()}_${Math.random().toString(16).slice(2)},
+    id:`reading_${Date.now()}_${Math.random().toString(16).slice(2)}`,
     createdAt:new Date().toISOString(),
     updatedAt:new Date().toISOString(),
     name:name?.trim() || "Untitled Reading",
@@ -571,7 +571,7 @@ function analyzeSavedPatterns(readings){
 
     (r.routeEntries || []).forEach(e=>{
       if(e.code && e.code !== "X" && e.code !== "?"){
-        const key=${e.code} · ${e.demon};
+        const key=`${e.code} · ${e.demon}`;
         routeCounts[key]=(routeCounts[key] || 0)+1;
       }
     });
@@ -622,10 +622,10 @@ const c={bg:"#0C0C0B",surface:"#141413",raised:"#1A1A18",border:"#262624",border
 
 function Label({children,style:s}){return<span style={{...f.mono,fontSize:11,letterSpacing:"0.14em",textTransform:"uppercase",color:c.dim,...s}}>{children}</span>;}
 function Mono({children,style:s,...props}){return<span style={{...f.mono,color:c.muted,fontSize:14,...s}}{...props}>{children}</span>;}
-function Pill({children,active,color,onClick,style:s}){return<button onClick={onClick}style={{...f.mono,fontSize:12,letterSpacing:"0.04em",padding:"7px 16px",borderRadius:100,border:1px solid ${active?(color||c.text):c.border},background:active?(color||c.text):"transparent",color:active?c.bg:c.muted,cursor:"pointer",transition:"all 0.2s",whiteSpace:"nowrap",...s}}>{children}</button>;}
-function Bar({value,color}){return<div style={{height:2,width:"100%",background:c.border,borderRadius:1}}><div style={{height:"100%",width:${Math.min(100,value)}%,background:color||c.indicator,borderRadius:1,transition:"width 0.6s cubic-bezier(0.16,1,0.3,1)"}}/></div>;}
+function Pill({children,active,color,onClick,style:s}){return<button onClick={onClick}style={{...f.mono,fontSize:12,letterSpacing:"0.04em",padding:"7px 16px",borderRadius:100,border:`1px solid ${active?(color||c.text):c.border}`,background:active?(color||c.text):"transparent",color:active?c.bg:c.muted,cursor:"pointer",transition:"all 0.2s",whiteSpace:"nowrap",...s}}>{children}</button>;}
+function Bar({value,color}){return<div style={{height:2,width:"100%",background:c.border,borderRadius:1}}><div style={{height:"100%",width:`${Math.min(100,value)}%`,background:color||c.indicator,borderRadius:1,transition:"width 0.6s cubic-bezier(0.16,1,0.3,1)"}}/></div>;}
 function Section({label,children,style:s}){return<div style={s}>{label&&<Label style={{display:"block",marginBottom:14}}>{label}</Label>}{children}</div>;}
-function Panel({children,style:s,onClick}){return<div onClick={onClick}style={{background:c.surface,border:1px solid ${c.borderS},borderRadius:20,overflow:"hidden",...s,cursor:onClick?"pointer":undefined}}>{children}</div>;}
+function Panel({children,style:s,onClick}){return<div onClick={onClick}style={{background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:20,overflow:"hidden",...s,cursor:onClick?"pointer":undefined}}>{children}</div>;}
 function InnerPanel({children,style:s}){return<div style={{background:c.bg,borderRadius:14,padding:"20px 22px",...s}}>{children}</div>;}
 
 // ── TAB BAR ───────────────────────────────────────────────────────
@@ -651,17 +651,17 @@ const tabDefs=[
   {id:"diagnosis",label:"Locate"}
 
 ];
-function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:1px solid ${c.borderS},borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
+function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
 
 // ── STATE MAP ─────────────────────────────────────────────────────
 
 function StateMap({activeState,onSelect,bp}){
   const stateList=Object.values(states);const eo={3:0.6,2:0.35,1:0.15};const ew={3:2.5,2:1.5,1:0.8};const pad=bp.isMobile?16:28;
-  return<Panel><div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Temporal topology</div><div style={{...f.monoLight,fontSize:bp.isMobile?13:14,color:c.dim,marginTop:8}}>Ten states of local time production. Select to inspect.</div></div>
-  <div style={{padding:0 ${pad*0.6}px ${pad*0.6}px}}><svg viewBox="0 0 1000 900"style={{width:"100%",display:"block",borderRadius:14,background:c.bg}}>
-  <defs>{stateList.map(s=><marker key={s.id}id={a4-${s.id}}markerWidth="6"markerHeight="6"refX="4.5"refY="3"orient="auto"><polygon points="0 0,6 3,0 6"fill={s.color}opacity="0.6"/></marker>)}</defs>
-  {transitions.map((e,i)=>{const from=states[e.from],to=states[e.to],act=activeState===e.from||activeState===e.to,dim=activeState&&!act;return<path key={i}d={getCurvePath(from,to,e.strength===1?18:30)}fill="none"stroke={act?from.color:c.border}strokeWidth={act?ew[e.strength]*1.3:ew[e.strength]}strokeOpacity={dim?0.06:act?0.8:eo[e.strength]}strokeDasharray={e.strength===1?"4 4":"none"}markerEnd={url(#a4-${from.id})}style={{transition:"all 0.4s ease"}}/>;})}
-  {stateList.map(s=>{const isA=activeState===s.id,conn=activeState&&transitions.some(t=>(t.from===activeState&&t.to===s.id)||(t.to===activeState&&t.from===s.id)||s.id===activeState),dim=activeState&&!isA&&!conn;return<g key={s.id}transform={translate(${s.x},${s.y})}onClick={()=>onSelect(s.id)}style={{cursor:"pointer"}}>{isA&&<circle r={62}fill="none"stroke={s.color}strokeOpacity={0.12}/>}<circle r={isA?50:42}fill={isA?${s.color}10:c.surface}stroke={s.color}strokeWidth={isA?2:1}opacity={dim?0.15:1}style={{transition:"all 0.35s ease"}}/><text x="0"y="-8"textAnchor="middle"fontSize="10"fill={dim?c.borderS:s.color}style={{...f.mono,letterSpacing:"0.18em",fontWeight:500}}>{s.name.toUpperCase()}</text><text x="0"y="8"textAnchor="middle"fontSize="9"fill={dim?c.borderS:c.dim}style={f.monoLight}>{s.zone}</text><text x="0"y="22"textAnchor="middle"fontSize="8.5"fill={dim?c.borderS:c.dim}style={f.monoLight}opacity={0.5}>{s.short}</text></g>;})}
+  return<Panel><div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Temporal topology</div><div style={{...f.monoLight,fontSize:bp.isMobile?13:14,color:c.dim,marginTop:8}}>Ten states of local time production. Select to inspect.</div></div>
+  <div style={{padding:`0 ${pad*0.6}px ${pad*0.6}px`}}><svg viewBox="0 0 1000 900"style={{width:"100%",display:"block",borderRadius:14,background:c.bg}}>
+  <defs>{stateList.map(s=><marker key={s.id}id={`a4-${s.id}`}markerWidth="6"markerHeight="6"refX="4.5"refY="3"orient="auto"><polygon points="0 0,6 3,0 6"fill={s.color}opacity="0.6"/></marker>)}</defs>
+  {transitions.map((e,i)=>{const from=states[e.from],to=states[e.to],act=activeState===e.from||activeState===e.to,dim=activeState&&!act;return<path key={i}d={getCurvePath(from,to,e.strength===1?18:30)}fill="none"stroke={act?from.color:c.border}strokeWidth={act?ew[e.strength]*1.3:ew[e.strength]}strokeOpacity={dim?0.06:act?0.8:eo[e.strength]}strokeDasharray={e.strength===1?"4 4":"none"}markerEnd={`url(#a4-${from.id})`}style={{transition:"all 0.4s ease"}}/>;})}
+  {stateList.map(s=>{const isA=activeState===s.id,conn=activeState&&transitions.some(t=>(t.from===activeState&&t.to===s.id)||(t.to===activeState&&t.from===s.id)||s.id===activeState),dim=activeState&&!isA&&!conn;return<g key={s.id}transform={`translate(${s.x},${s.y})`}onClick={()=>onSelect(s.id)}style={{cursor:"pointer"}}>{isA&&<circle r={62}fill="none"stroke={s.color}strokeOpacity={0.12}/>}<circle r={isA?50:42}fill={isA?`${s.color}10`:c.surface}stroke={s.color}strokeWidth={isA?2:1}opacity={dim?0.15:1}style={{transition:"all 0.35s ease"}}/><text x="0"y="-8"textAnchor="middle"fontSize="10"fill={dim?c.borderS:s.color}style={{...f.mono,letterSpacing:"0.18em",fontWeight:500}}>{s.name.toUpperCase()}</text><text x="0"y="8"textAnchor="middle"fontSize="9"fill={dim?c.borderS:c.dim}style={f.monoLight}>{s.zone}</text><text x="0"y="22"textAnchor="middle"fontSize="8.5"fill={dim?c.borderS:c.dim}style={f.monoLight}opacity={0.5}>{s.short}</text></g>;})}
   </svg></div></Panel>;
 }
 
@@ -669,7 +669,7 @@ function StateMap({activeState,onSelect,bp}){
 
 function StateInspector({stateId,onJump,onOpenDemon,bp}){
   const s=states[stateId];const pad=bp.isMobile?18:28;const sub=bp.isMobile?"1fr":"1fr 1fr";const tri=bp.isMobile?"1fr":bp.isTablet?"1fr 1fr":"1fr 1fr 1fr";
-  return<Panel><div style={{padding:${pad}px ${pad}px 0}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><Label>{s.region} · {s.short}</Label><div style={{...f.serif,fontSize:bp.isMobile?32:40,color:c.text,marginTop:6,lineHeight:1.1}}>{s.name}</div></div><div style={{width:12,height:12,borderRadius:"50%",background:s.color,boxShadow:0 0 24px ${s.color}40,marginTop:8,flexShrink:0}}/></div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.7}}>{s.signature}</div></div>
+  return<Panel><div style={{padding:`${pad}px ${pad}px 0`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><Label>{s.region} · {s.short}</Label><div style={{...f.serif,fontSize:bp.isMobile?32:40,color:c.text,marginTop:6,lineHeight:1.1}}>{s.name}</div></div><div style={{width:12,height:12,borderRadius:"50%",background:s.color,boxShadow:`0 0 24px ${s.color}40`,marginTop:8,flexShrink:0}}/></div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.7}}>{s.signature}</div></div>
   <div style={{padding:pad}}>
     <div style={{display:"grid",gridTemplateColumns:sub,gap:14}}><InnerPanel><Label>Zone / gate</Label><Mono style={{display:"block",marginTop:8}}>{s.zone} · {s.gate}</Mono></InnerPanel><InnerPanel><Label>Function</Label><Mono style={{display:"block",marginTop:8}}>{s.function}</Mono></InnerPanel></div>
     <div style={{display:"grid",gridTemplateColumns:sub,gap:14,marginTop:14}}><InnerPanel><Label>Body</Label><div style={{marginTop:10}}>{s.body.map(x=><div key={x}style={{...f.monoLight,fontSize:13,color:c.muted,padding:"4px 0"}}>{x}</div>)}</div></InnerPanel><InnerPanel><Label>Cues</Label><div style={{marginTop:10}}>{s.cues.map(x=><div key={x}style={{...f.monoLight,fontSize:13,color:c.muted,padding:"4px 0"}}>{x}</div>)}</div></InnerPanel></div>
@@ -683,8 +683,8 @@ function StateInspector({stateId,onJump,onOpenDemon,bp}){
 
 function DemonConstellation({selectedDemon,onSelectDemon,stateFilter,onStateJump,learnMode,bp}){
   const dPos=useMemo(()=>buildDemonPositions(),[]);const vis=demonGraph.filter(d=>stateFilter==="all"||d.state===stateFilter||d.type===stateFilter);const visSet=new Set(vis.map(d=>d.id));const cur=demonGraph.find(d=>d.id===selectedDemon)||demonGraph[0];const out=cur.links.filter(id=>visSet.has(id));const inc=demonGraph.filter(d=>visSet.has(d.id)&&d.links.includes(cur.id)).map(d=>d.id);const outS=new Set(out),inS=new Set(inc),biS=new Set(out.filter(id=>inS.has(id)));const click=new Set(learnMode?[cur.id,...out,...inc]:Array.from(visSet));const pad=bp.isMobile?16:28;const flowG=bp.isMobile?"1fr":"1fr 1fr 1fr";
-  return<Panel><div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Demon network</div><div style={{...f.monoLight,fontSize:bp.isMobile?13:14,color:c.dim,marginTop:8}}>45 demons. Warm = outgoing, cool = incoming, gold = reciprocal.</div></div>
- <div style={{padding:0 ${pad*0.6}px ${pad*0.6}px}}><svg viewBox="0 0 1000 1100" style={{
+  return<Panel><div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Demon network</div><div style={{...f.monoLight,fontSize:bp.isMobile?13:14,color:c.dim,marginTop:8}}>45 demons. Warm = outgoing, cool = incoming, gold = reciprocal.</div></div>
+ <div style={{padding:`0 ${pad*0.6}px ${pad*0.6}px`}}><svg viewBox="0 0 1000 1100" style={{
   width:"100%",
   display:"block",
   margin:"0 auto",
@@ -692,14 +692,14 @@ function DemonConstellation({selectedDemon,onSelectDemon,stateFilter,onStateJump
   background:c.bg
 }}>
   <defs><marker id="a4-out"markerWidth="7"markerHeight="7"refX="5.5"refY="3.5"orient="auto"><polygon points="0 0,7 3.5,0 7"fill={c.text}opacity="0.7"/></marker><marker id="a4-in"markerWidth="7"markerHeight="7"refX="5.5"refY="3.5"orient="auto"><polygon points="0 0,7 3.5,0 7"fill="#7C8A9B"opacity="0.7"/></marker></defs>
-  {demonGraph.flatMap(d=>{if(!visSet.has(d.id))return[];return d.links.filter(l=>visSet.has(l)).map(link=>{const tgt=demonGraph.find(x=>x.id===link);if(!tgt)return null;const p1=dPos[d.id],p2=dPos[tgt.id];const isO=d.id===cur.id,isI=link===cur.id;let st=c.borderS,w=0.6,op=0.3,mk;if(isO){st=c.indicator;w=2.2;op=0.7;mk="url(#a4-out)";}else if(isI){st="#7C8A9B";w=1.8;op=0.65;mk="url(#a4-in)";}return<line key={${d.id}-${link}}x1={p1.x}y1={p1.y}x2={p2.x}y2={p2.y}stroke={st}strokeWidth={w}strokeOpacity={op}markerEnd={mk}style={{transition:"all 0.3s ease"}}/>;});})}
+  {demonGraph.flatMap(d=>{if(!visSet.has(d.id))return[];return d.links.filter(l=>visSet.has(l)).map(link=>{const tgt=demonGraph.find(x=>x.id===link);if(!tgt)return null;const p1=dPos[d.id],p2=dPos[tgt.id];const isO=d.id===cur.id,isI=link===cur.id;let st=c.borderS,w=0.6,op=0.3,mk;if(isO){st=c.indicator;w=2.2;op=0.7;mk="url(#a4-out)";}else if(isI){st="#7C8A9B";w=1.8;op=0.65;mk="url(#a4-in)";}return<line key={`${d.id}-${link}`}x1={p1.x}y1={p1.y}x2={p2.x}y2={p2.y}stroke={st}strokeWidth={w}strokeOpacity={op}markerEnd={mk}style={{transition:"all 0.3s ease"}}/>;});})}
   {Object.values(states).map(s=>{const fd=stateFilter!=="all"&&stateFilter!==s.id;return<g key={s.id}onClick={()=>onStateJump(s.id)}style={{cursor:"pointer"}}><circle cx={s.x}cy={s.y+40}r={28}fill="none"stroke={s.color}strokeOpacity={fd?0.1:0.25}strokeWidth={1}/><text x={s.x}y={s.y+43}textAnchor="middle"fontSize="8"fill={s.color}style={{...f.mono,letterSpacing:"0.14em",fontWeight:500}}opacity={fd?0.2:0.6}>{s.short}</text></g>;})}
-  {vis.map(d=>{const pos=dPos[d.id];const col=states[d.state].color;const act=d.id===cur.id;const isO=outS.has(d.id),isI=inS.has(d.id),isBi=biS.has(d.id),isCl=click.has(d.id);let fill=c.surface,tc=col;if(act){fill=c.text;tc=c.bg;}else if(isBi){fill="#C9B06B";tc=c.bg;}else if(isO){fill=c.indicator;tc=c.bg;}else if(isI){fill="#7C8A9B";tc=c.bg;}return<g key={d.id}transform={translate(${pos.x},${pos.y})}onClick={()=>isCl&&onSelectDemon(d.id)}style={{cursor:isCl?"pointer":"default"}}opacity={isCl?1:learnMode?0.15:0.7}>{act&&<circle r={22}fill="none"stroke={c.text}strokeOpacity={0.2}/>}<circle r={act?15:10}fill={fill}stroke={act||isO||isI||isBi?"none":col}strokeWidth={0.8}style={{transition:"all 0.3s ease"}}/><text x="0"y={act?3.5:3}textAnchor="middle"fontSize={act?7.5:7}fill={tc}style={{...f.mono,fontWeight:500}}>{d.mesh}</text>{act&&<text x="0"y="-24"textAnchor="middle"fontSize="13"fill={c.text}style={f.serif}>{d.id}</text>}</g>;})}
+  {vis.map(d=>{const pos=dPos[d.id];const col=states[d.state].color;const act=d.id===cur.id;const isO=outS.has(d.id),isI=inS.has(d.id),isBi=biS.has(d.id),isCl=click.has(d.id);let fill=c.surface,tc=col;if(act){fill=c.text;tc=c.bg;}else if(isBi){fill="#C9B06B";tc=c.bg;}else if(isO){fill=c.indicator;tc=c.bg;}else if(isI){fill="#7C8A9B";tc=c.bg;}return<g key={d.id}transform={`translate(${pos.x},${pos.y})`}onClick={()=>isCl&&onSelectDemon(d.id)}style={{cursor:isCl?"pointer":"default"}}opacity={isCl?1:learnMode?0.15:0.7}>{act&&<circle r={22}fill="none"stroke={c.text}strokeOpacity={0.2}/>}<circle r={act?15:10}fill={fill}stroke={act||isO||isI||isBi?"none":col}strokeWidth={0.8}style={{transition:"all 0.3s ease"}}/><text x="0"y={act?3.5:3}textAnchor="middle"fontSize={act?7.5:7}fill={tc}style={{...f.mono,fontWeight:500}}>{d.mesh}</text>{act&&<text x="0"y="-24"textAnchor="middle"fontSize="13"fill={c.text}style={f.serif}>{d.id}</text>}</g>;})}
   </svg></div>
-  <div style={{padding:0 ${pad}px ${pad}px}}><div style={{display:"grid",gridTemplateColumns:flowG,gap:20}}>
-    <Section label={Incoming → ${cur.id}}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{inc.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!inc.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
+  <div style={{padding:`0 ${pad}px ${pad}px`}}><div style={{display:"grid",gridTemplateColumns:flowG,gap:20}}>
+    <Section label={`Incoming → ${cur.id}`}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{inc.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!inc.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
     <Section label="Reciprocal"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{Array.from(biS).map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}color="#C9B06B"active>{id}</Pill>)}{!biS.size&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
-    <Section label={${cur.id} → Outgoing}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{out.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!out.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
+    <Section label={`${cur.id} → Outgoing`}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{out.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!out.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
   </div></div></Panel>;
 }
 
@@ -708,15 +708,15 @@ function DemonConstellation({selectedDemon,onSelectDemon,stateFilter,onStateJump
 function DemonInspector({demonName,onOpenState,onOpenDemon,bp}){
   const dm=demons[demonName]||demons["Mur Mur"];const gr=demonGraph.find(d=>d.id===demonName)||demonGraph[0];const st=states[gr.state];const ns=getNetSpanFromMesh(dm.mesh);const outIds=gr.links;const inIds=demonGraph.filter(d=>d.links.includes(gr.id)).map(d=>d.id);const recip=outIds.filter(id=>inIds.includes(id));const pad=bp.isMobile?18:28;const metaG=bp.isMobile?"1fr 1fr":"repeat(4,1fr)";const flowG=bp.isMobile?"1fr":"1fr 1fr 1fr";
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
-  <Panel><div style={{padding:${pad}px ${pad}px 0}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><Label>{gr.type} · mesh {dm.mesh}</Label><div style={{...f.serif,fontSize:bp.isMobile?28:36,color:c.text,marginTop:6}}>{demonName}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:8}}>{dm.role}</div></div><div style={{width:10,height:10,borderRadius:"50%",background:st.color,boxShadow:0 0 20px ${st.color}50,marginTop:10,flexShrink:0}}/></div></div>
-  <div style={{padding:${pad*0.75}px ${pad}px ${pad}px}}>
+  <Panel><div style={{padding:`${pad}px ${pad}px 0`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><Label>{gr.type} · mesh {dm.mesh}</Label><div style={{...f.serif,fontSize:bp.isMobile?28:36,color:c.text,marginTop:6}}>{demonName}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:8}}>{dm.role}</div></div><div style={{width:10,height:10,borderRadius:"50%",background:st.color,boxShadow:`0 0 20px ${st.color}50`,marginTop:10,flexShrink:0}}/></div></div>
+  <div style={{padding:`${pad*0.75}px ${pad}px ${pad}px`}}>
     <div style={{display:"grid",gridTemplateColumns:metaG,gap:14}}>{[["Mesh",dm.mesh],["Net-span",ns],["State",st.name],["Zone",st.zone]].map(([l,v])=><InnerPanel key={l}><Label>{l}</Label><Mono style={{display:"block",marginTop:6}}>{v}</Mono></InnerPanel>)}</div>
     <Pill onClick={()=>onOpenState(st.id)}color={st.color}active style={{marginTop:18}}>Open {st.name} state</Pill>
     <InnerPanel style={{marginTop:18}}><Label>Note</Label><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:10,lineHeight:1.7}}>{dm.note}</div></InnerPanel>
     <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:14,marginTop:14}}><InnerPanel><Label>Native</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{(dm.native||[]).map(s=><Pill key={s}>{states[s]?.name}</Pill>)}{!(dm.native||[]).length&&<Mono style={{fontSize:12}}>—</Mono>}</div></InnerPanel><InnerPanel><Label>Bridge</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{(dm.bridge||[]).map(s=><Pill key={s}>{states[s]?.name}</Pill>)}{!(dm.bridge||[]).length&&<Mono style={{fontSize:12}}>—</Mono>}</div></InnerPanel></div>
     <div style={{display:"grid",gridTemplateColumns:flowG,gap:14,marginTop:14}}><InnerPanel><Label>Incoming</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{inIds.map(id=><Pill key={id}onClick={()=>onOpenDemon(id)}>{id}</Pill>)}</div></InnerPanel><InnerPanel><Label>Reciprocal</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{recip.map(id=><Pill key={id}onClick={()=>onOpenDemon(id)}color="#C9B06B"active>{id}</Pill>)}{!recip.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></InnerPanel><InnerPanel><Label>Outgoing</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{outIds.map(id=><Pill key={id}onClick={()=>onOpenDemon(id)}>{id}</Pill>)}</div></InnerPanel></div>
   </div></Panel>
-  <Panel><div style={{padding:${pad*0.85}px ${pad}px ${pad*0.3}px}}><div style={{...f.serif,fontSize:22,color:c.text}}>Routes</div></div><div style={{padding:0 ${pad}px ${pad}px}}>{(routeOracle[demonName]||[]).length?(routeOracle[demonName]||[]).map((item,i)=><InnerPanel key={${item.code}-${i}}style={{marginTop:i?12:0}}><Label>Route [{item.code}]</Label><div style={{...f.serif,fontSize:20,color:c.text,marginTop:8}}>{item.title}</div><div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:8,lineHeight:1.7}}>{item.text}</div></InnerPanel>):<InnerPanel><Mono style={{fontSize:13}}>No route fragments attached.</Mono></InnerPanel>}</div></Panel>
+  <Panel><div style={{padding:`${pad*0.85}px ${pad}px ${pad*0.3}px`}}><div style={{...f.serif,fontSize:22,color:c.text}}>Routes</div></div><div style={{padding:`0 ${pad}px ${pad}px`}}>{(routeOracle[demonName]||[]).length?(routeOracle[demonName]||[]).map((item,i)=><InnerPanel key={`${item.code}-${i}`}style={{marginTop:i?12:0}}><Label>Route [{item.code}]</Label><div style={{...f.serif,fontSize:20,color:c.text,marginTop:8}}>{item.title}</div><div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:8,lineHeight:1.7}}>{item.text}</div></InnerPanel>):<InnerPanel><Mono style={{fontSize:13}}>No route fragments attached.</Mono></InnerPanel>}</div></Panel>
   </div>;
 }
 
@@ -730,8 +730,8 @@ function NumogramRoutesLab({bp}){
   gap:20,
   alignItems:"start"
 }}>
-  <Panel><div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Numogram</div><div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>Rites traced through zones, currents, gates, and channels.</div></div>
-  <div style={{padding:0 ${pad*0.6}px ${pad*0.6}px}}><svg
+  <Panel><div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Numogram</div><div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>Rites traced through zones, currents, gates, and channels.</div></div>
+  <div style={{padding:`0 ${pad*0.6}px ${pad*0.6}px`}}><svg
   viewBox="0 0 1000 2050"
   preserveAspectRatio="xMidYMid meet"
   style={{
@@ -786,7 +786,7 @@ function NumogramRoutesLab({bp}){
  
   {/* Route dots — bright orange, pulsing, numbered */}
   {pts.map((pt, i) => (
-    <g key={${pt.digit}-${i}}>
+    <g key={`${pt.digit}-${i}`}>
       <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}>
         <animate
           attributeName="r"
@@ -817,8 +817,8 @@ function NumogramRoutesLab({bp}){
   ))}
 </svg></div></Panel>
   <div style={{display:"flex",flexDirection:"column",gap:20}}>
-    <Panel><div style={{padding:pad}}><Section label="Demon"><select value={sd}onChange={e=>setSd(e.target.value)}style={{...f.mono,fontSize:14,width:"100%",padding:"12px 16px",borderRadius:12,border:1px solid ${c.border},background:c.bg,color:c.text,outline:"none",marginTop:4}}>{dn.map(n=><option key={n}value={n}>{n}</option>)}</select></Section><Section label="Routes"style={{marginTop:24}}><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>{routes.length?routes.map((it,i)=><Pill key={${it.code}-${i}}active={src===it.code}onClick={()=>setSrc(it.code)}>{it.code}</Pill>):<Mono style={{fontSize:12}}>No routes</Mono>}</div></Section></div></Panel>
-    <Panel style={{flex:1}}><div style={{padding:pad}}>{sr?<><Label>Route [{sr.code}]</Label><div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>{sr.title}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>{sr.text}</div><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>{String(sr.code).split("").map((ch,i)=><span key={i}style={{...f.mono,fontSize:14,width:34,height:34,display:"inline-flex",alignItems:"center",justifyContent:"center",border:1px solid ${c.border},borderRadius:10,color:c.muted}}>{ch}</span>)}</div></>:<Mono style={{fontSize:13}}>No route selected.</Mono>}</div></Panel>
+    <Panel><div style={{padding:pad}}><Section label="Demon"><select value={sd}onChange={e=>setSd(e.target.value)}style={{...f.mono,fontSize:14,width:"100%",padding:"12px 16px",borderRadius:12,border:`1px solid ${c.border}`,background:c.bg,color:c.text,outline:"none",marginTop:4}}>{dn.map(n=><option key={n}value={n}>{n}</option>)}</select></Section><Section label="Routes"style={{marginTop:24}}><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>{routes.length?routes.map((it,i)=><Pill key={`${it.code}-${i}`}active={src===it.code}onClick={()=>setSrc(it.code)}>{it.code}</Pill>):<Mono style={{fontSize:12}}>No routes</Mono>}</div></Section></div></Panel>
+    <Panel style={{flex:1}}><div style={{padding:pad}}>{sr?<><Label>Route [{sr.code}]</Label><div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>{sr.title}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>{sr.text}</div><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>{String(sr.code).split("").map((ch,i)=><span key={i}style={{...f.mono,fontSize:14,width:34,height:34,display:"inline-flex",alignItems:"center",justifyContent:"center",border:`1px solid ${c.border}`,borderRadius:10,color:c.muted}}>{ch}</span>)}</div></>:<Mono style={{fontSize:13}}>No route selected.</Mono>}</div></Panel>
   </div></div>;
 }
 function CipherLab({bp}){
@@ -848,7 +848,7 @@ function CipherLab({bp}){
               height:10,
               borderRadius:"50%",
               background:st.color,
-              boxShadow:0 0 18px ${st.color}55,
+              boxShadow:`0 0 18px ${st.color}55`,
               marginTop:5,
               flexShrink:0
             }}/>
@@ -869,7 +869,7 @@ function CipherLab({bp}){
       alignItems:"start"
     }}>
       <Panel>
-        <div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
           <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
             Cipher Lab
           </div>
@@ -878,7 +878,7 @@ function CipherLab({bp}){
           </div>
         </div>
 
-        <div style={{padding:0 ${pad}px ${pad}px}}>
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
           <input
             value={input}
             onChange={e=>setInput(e.target.value)}
@@ -889,7 +889,7 @@ function CipherLab({bp}){
               width:"100%",
               padding:"16px 18px",
               borderRadius:14,
-              border:1px solid ${c.border},
+              border:`1px solid ${c.border}`,
               background:c.bg,
               color:c.text,
               outline:"none",
@@ -956,7 +956,7 @@ function CipherLab({bp}){
               )}
 
               {pts.map((pt,i)=>(
-                <g key={${pt.digit}-${i}}>
+                <g key={`${pt.digit}-${i}`}>
                   <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}/>
                   <circle cx={pt.x} cy={pt.y} r={14} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
                   <text
@@ -986,7 +986,7 @@ function CipherLab({bp}){
 
             <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:16}}>
               {result.cleaned.split("").map((ch,i)=>(
-                <span key={${ch}-${i}} style={{
+                <span key={`${ch}-${i}`} style={{
                   ...f.mono,
                   fontSize:14,
                   width:36,
@@ -994,7 +994,7 @@ function CipherLab({bp}){
                   display:"inline-flex",
                   alignItems:"center",
                   justifyContent:"center",
-                  border:1px solid ${c.border},
+                  border:`1px solid ${c.border}`,
                   borderRadius:10,
                   color:c.muted
                 }}>
@@ -1009,28 +1009,28 @@ function CipherLab({bp}){
           <div style={{padding:pad}}>
             <Section label="Exact match">
               {result.exact.length
-                ? result.exact.map(e=><RouteCard key={${e.demon}-${e.code}} entry={e} label="Exact"/>)
+                ? result.exact.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Exact"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No exact match.</Mono></InnerPanel>
               }
             </Section>
 
             <Section label="Embedded inside this route" style={{marginTop:24}}>
               {result.contains.length
-                ? result.contains.map(e=><RouteCard key={${e.demon}-${e.code}} entry={e} label="Embedded"/>)
+                ? result.contains.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Embedded"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No embedded route found.</Mono></InnerPanel>
               }
             </Section>
 
             <Section label="Routes that contain this route" style={{marginTop:24}}>
               {result.containedBy.length
-                ? result.containedBy.map(e=><RouteCard key={${e.demon}-${e.code}} entry={e} label="Carrier"/>)
+                ? result.containedBy.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Carrier"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No larger carrier route found.</Mono></InnerPanel>
               }
             </Section>
 
             <Section label="Same terminal pattern" style={{marginTop:24}}>
               {result.sameTerminal.length
-                ? result.sameTerminal.map(e=><RouteCard key={${e.demon}-${e.code}} entry={e} label="Terminal resonance"/>)
+                ? result.sameTerminal.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Terminal resonance"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No terminal resonance found.</Mono></InnerPanel>
               }
             </Section>
@@ -1075,7 +1075,7 @@ function CompareLab({bp}){
               height:9,
               borderRadius:"50%",
               background:st.color,
-              boxShadow:0 0 16px ${st.color}55,
+              boxShadow:`0 0 16px ${st.color}55`,
               marginTop:5,
               flexShrink:0
             }}/>
@@ -1093,7 +1093,7 @@ function CompareLab({bp}){
     return (
       <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
         {flow.map((x,i)=>(
-          <div key={${x.demon}-${i}} style={{
+          <div key={`${x.demon}-${i}`} style={{
             display:"flex",
             alignItems:"center",
             gap:8
@@ -1102,7 +1102,7 @@ function CompareLab({bp}){
               ...f.mono,
               fontSize:11,
               padding:"7px 10px",
-              border:1px solid ${c.border},
+              border:`1px solid ${c.border}`,
               borderRadius:10,
               color:c.muted,
               background:c.bg
@@ -1136,7 +1136,7 @@ function CompareLab({bp}){
       alignItems:"start"
     }}>
       <Panel>
-        <div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
           <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
             Compare Lab
           </div>
@@ -1145,7 +1145,7 @@ function CompareLab({bp}){
           </div>
         </div>
 
-        <div style={{padding:0 ${pad}px ${pad}px}}>
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
           <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:12}}>
             <div>
               <Label>A</Label>
@@ -1161,7 +1161,7 @@ function CompareLab({bp}){
                   marginTop:8,
                   padding:"14px 16px",
                   borderRadius:14,
-                  border:1px solid ${c.border},
+                  border:`1px solid ${c.border}`,
                   background:c.bg,
                   color:c.text,
                   outline:"none",
@@ -1185,7 +1185,7 @@ function CompareLab({bp}){
                   marginTop:8,
                   padding:"14px 16px",
                   borderRadius:14,
-                  border:1px solid ${c.border},
+                  border:`1px solid ${c.border}`,
                   background:c.bg,
                   color:c.text,
                   outline:"none",
@@ -1273,7 +1273,7 @@ function CompareLab({bp}){
               )}
 
               {aPts.map((pt,i)=>(
-                <g key={a-${pt.digit}-${i}}>
+                <g key={`a-${pt.digit}-${i}`}>
                   <circle cx={pt.x} cy={pt.y} r={13} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
                   <text x={pt.x} y={pt.y+5} textAnchor="middle" fontSize={13} fill="#0C0C0B" style={{...f.mono,fontWeight:600}}>
                     {pt.digit}
@@ -1282,7 +1282,7 @@ function CompareLab({bp}){
               ))}
 
               {bPts.map((pt,i)=>(
-                <g key={b-${pt.digit}-${i}}>
+                <g key={`b-${pt.digit}-${i}`}>
                   <circle cx={pt.x+24} cy={pt.y} r={12} fill="#A7F3FF" stroke="#FFFFFF" strokeWidth={2}/>
                   <text x={pt.x+24} y={pt.y+4} textAnchor="middle" fontSize={12} fill="#0C0C0B" style={{...f.mono,fontWeight:600}}>
                     {pt.digit}
@@ -1338,14 +1338,14 @@ function CompareLab({bp}){
           <div style={{padding:pad}}>
             <Section label="A exact routes">
               {result.A.routes.length
-                ? result.A.routes.map((e,i)=><SmallRouteCard key={a-${e.demon}-${e.code}-${i}} entry={e} label="A"/>)
+                ? result.A.routes.map((e,i)=><SmallRouteCard key={`a-${e.demon}-${e.code}-${i}`} entry={e} label="A"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No route found.</Mono></InnerPanel>
               }
             </Section>
 
             <Section label="B exact routes" style={{marginTop:24}}>
               {result.B.routes.length
-                ? result.B.routes.map((e,i)=><SmallRouteCard key={b-${e.demon}-${e.code}-${i}} entry={e} label="B"/>)
+                ? result.B.routes.map((e,i)=><SmallRouteCard key={`b-${e.demon}-${e.code}-${i}`} entry={e} label="B"/>)
                 : <InnerPanel><Mono style={{fontSize:13}}>No route found.</Mono></InnerPanel>
               }
             </Section>
@@ -1374,7 +1374,7 @@ function CompareLab({bp}){
                       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
                         {item.demons.length
                           ? item.demons.map(e=>(
-                              <Pill key={${item.frag}-${e.demon}}>
+                              <Pill key={`${item.frag}-${e.demon}`}>
                                 {e.demon}
                               </Pill>
                             ))
@@ -1510,7 +1510,7 @@ function saveToGrimoire(){
               height:9,
               borderRadius:"50%",
               background:st.color,
-              boxShadow:0 0 16px ${st.color}55,
+              boxShadow:`0 0 16px ${st.color}55`,
               marginTop:5,
               flexShrink:0
             }}/>
@@ -1531,7 +1531,7 @@ function saveToGrimoire(){
       alignItems:"start"
     }}>
       <Panel>
-        <div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
           <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
             Chain Builder
           </div>
@@ -1540,7 +1540,7 @@ function saveToGrimoire(){
           </div>
         </div>
 
-        <div style={{padding:0 ${pad}px ${pad}px}}>
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
           <Section label="Name">
             <input
               value={chainName}
@@ -1552,7 +1552,7 @@ function saveToGrimoire(){
                 width:"100%",
                 padding:"14px 16px",
                 borderRadius:14,
-                border:1px solid ${c.border},
+                border:`1px solid ${c.border}`,
                 background:c.bg,
                 color:c.text,
                 outline:"none",
@@ -1571,7 +1571,7 @@ function saveToGrimoire(){
       width:"100%",
       padding:"14px 16px",
       borderRadius:14,
-      border:1px solid ${c.border},
+      border:`1px solid ${c.border}`,
       background:c.bg,
       color:c.text,
       outline:"none",
@@ -1592,7 +1592,7 @@ function saveToGrimoire(){
       width:"100%",
       padding:"14px 16px",
       borderRadius:14,
-      border:1px solid ${c.border},
+      border:`1px solid ${c.border}`,
       background:c.bg,
       color:c.text,
       outline:"none",
@@ -1612,7 +1612,7 @@ function saveToGrimoire(){
                   fontSize:14,
                   padding:"12px 14px",
                   borderRadius:12,
-                  border:1px solid ${c.border},
+                  border:`1px solid ${c.border}`,
                   background:c.bg,
                   color:c.text,
                   outline:"none"
@@ -1636,13 +1636,13 @@ function saveToGrimoire(){
               {chain.length ? chain.map((name,i)=>{
                 const info=getDemonStateInfo(name);
                 return (
-                  <div key={${name}-${i}} style={{
+                  <div key={`${name}-${i}`} style={{
                     display:"grid",
                     gridTemplateColumns:bp.isMobile?"1fr":"auto 1fr auto",
                     alignItems:"center",
                     gap:10,
                     background:c.bg,
-                    border:1px solid ${c.borderS},
+                    border:`1px solid ${c.borderS}`,
                     borderRadius:14,
                     padding:"12px 14px"
                   }}>
@@ -1678,7 +1678,7 @@ function saveToGrimoire(){
                           fontSize:11,
                           padding:"7px 9px",
                           borderRadius:9,
-                          border:1px solid ${c.border},
+                          border:`1px solid ${c.border}`,
                           background:"transparent",
                           color:c.muted,
                           cursor:"pointer"
@@ -1693,7 +1693,7 @@ function saveToGrimoire(){
                           fontSize:11,
                           padding:"7px 9px",
                           borderRadius:9,
-                          border:1px solid ${c.border},
+                          border:`1px solid ${c.border}`,
                           background:"transparent",
                           color:c.muted,
                           cursor:"pointer"
@@ -1708,7 +1708,7 @@ function saveToGrimoire(){
                           fontSize:11,
                           padding:"7px 9px",
                           borderRadius:9,
-                          border:1px solid ${c.border},
+                          border:`1px solid ${c.border}`,
                           background:"transparent",
                           color:c.dim,
                           cursor:"pointer"
@@ -1784,7 +1784,7 @@ function saveToGrimoire(){
               )}
 
               {pts.map((pt,i)=>(
-                <g key={${pt.digit}-${i}}>
+                <g key={`${pt.digit}-${i}`}>
                   <circle cx={pt.x} cy={pt.y} r={13} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
                   <text
                     x={pt.x}
@@ -1835,7 +1835,7 @@ function saveToGrimoire(){
               {analysis.stateFlow.length ? (
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
                   {analysis.stateFlow.map((x,i)=>(
-                    <div key={${x.demon}-${i}} style={{
+                    <div key={`${x.demon}-${i}`} style={{
                       display:"flex",
                       alignItems:"center",
                       gap:8,
@@ -1845,7 +1845,7 @@ function saveToGrimoire(){
                         ...f.mono,
                         fontSize:11,
                         padding:"7px 10px",
-                        border:1px solid ${c.border},
+                        border:`1px solid ${c.border}`,
                         borderRadius:10,
                         color:c.muted,
                         background:c.bg
@@ -1880,7 +1880,7 @@ function saveToGrimoire(){
             <Section label="Route stack">
               {analysis.routeEntries.length ? (
                 analysis.routeEntries.map((entry,i)=>(
-                  <ChainRouteCard key={${entry.demon}-${entry.code}-${i}} entry={entry}/>
+                  <ChainRouteCard key={`${entry.demon}-${entry.code}-${i}`} entry={entry}/>
                 ))
               ) : (
                 <InnerPanel><Mono style={{fontSize:13}}>No route stack yet.</Mono></InnerPanel>
@@ -1905,7 +1905,7 @@ function saveToGrimoire(){
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
                       {item.demons.length ? item.demons.map(e=>(
-                        <Pill key={${item.frag}-${e.demon}}>
+                        <Pill key={`${item.frag}-${e.demon}`}>
                           {e.demon}
                         </Pill>
                       )) : (
@@ -2042,7 +2042,7 @@ function saveToGrimoire(){
       alignItems:"start"
     }}>
       <Panel>
-        <div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
           <div style={{...f.serif,fontSize:bp.isMobile?26:30,color:c.text}}>
             Grimoire
           </div>
@@ -2051,7 +2051,7 @@ function saveToGrimoire(){
           </div>
         </div>
 
-        <div style={{padding:0 ${pad}px ${pad}px}}>
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
           <input
             value={query}
             onChange={e=>setQuery(e.target.value)}
@@ -2062,7 +2062,7 @@ function saveToGrimoire(){
               width:"100%",
               padding:"14px 16px",
               borderRadius:14,
-              border:1px solid ${c.border},
+              border:`1px solid ${c.border}`,
               background:c.bg,
               color:c.text,
               outline:"none"
@@ -2089,7 +2089,7 @@ function saveToGrimoire(){
               letterSpacing:"0.04em",
               padding:"7px 16px",
               borderRadius:100,
-              border:1px solid ${c.border},
+              border:`1px solid ${c.border}`,
               background:"transparent",
               color:c.muted,
               cursor:"pointer"
@@ -2099,7 +2099,7 @@ function saveToGrimoire(){
             </label>
           </div>
 
-          <Section label={Readings · ${visible.length}} style={{marginTop:24}}>
+          <Section label={`Readings · ${visible.length}`} style={{marginTop:24}}>
             <div style={{display:"grid",gap:10,marginTop:10}}>
               {visible.length ? visible.map(r=>(
                 <div
@@ -2107,7 +2107,7 @@ function saveToGrimoire(){
                   onClick={()=>setActiveId(r.id)}
                   style={{
                     background:active?.id===r.id?c.raised:c.bg,
-                    border:1px solid ${active?.id===r.id?c.text:c.borderS},
+                    border:`1px solid ${active?.id===r.id?c.text:c.borderS}`,
                     borderRadius:16,
                     padding:"14px 16px",
                     cursor:"pointer",
@@ -2205,12 +2205,12 @@ function saveToGrimoire(){
               <Section label="State-flow" style={{marginTop:22}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
                   {(active.stateFlow || []).map((x,i)=>(
-                    <div key={${x.demon}-${i}} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <div key={`${x.demon}-${i}`} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       <span style={{
                         ...f.mono,
                         fontSize:11,
                         padding:"7px 10px",
-                        border:1px solid ${c.border},
+                        border:`1px solid ${c.border}`,
                         borderRadius:10,
                         color:c.muted,
                         background:c.bg
@@ -2245,7 +2245,7 @@ function saveToGrimoire(){
 
               <Section label="Route stack" style={{marginTop:22}}>
                 {(active.routeEntries || []).length ? active.routeEntries.map((e,i)=>(
-                  <InnerPanel key={${e.demon}-${e.code}-${i}} style={{marginTop:10}}>
+                  <InnerPanel key={`${e.demon}-${e.code}-${i}`} style={{marginTop:10}}>
                     <Label>Mesh {e.mesh} · [{e.code}]</Label>
                     <div style={{...f.serif,fontSize:21,color:c.text,marginTop:7}}>
                       {e.demon}
@@ -2302,7 +2302,7 @@ function saveToGrimoire(){
             {items.length ? items.slice(0,12).map((item,i)=>(
               <div key={item.name} style={{
                 background:c.bg,
-                border:1px solid ${c.borderS},
+                border:`1px solid ${c.borderS}`,
                 borderRadius:14,
                 padding:"13px 15px"
               }}>
@@ -2423,10 +2423,10 @@ function saveToGrimoire(){
 function DiagnosisWorkbench({onJump,onOpenDemon,bp}){
   const[sel,setSel]=useState([]);const[query,setQuery]=useState("");const result=useMemo(()=>scoreStates(sel,query),[sel,query]);const cur=result.best?states[result.best.stateId]:null;const toggle=s=>setSel(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);const pad=bp.isMobile?18:28;
   return<div style={{display:"grid",gridTemplateColumns:bp.isDesktop?"1.1fr 0.9fr":"1fr",gap:20}}>
-  <Panel><div style={{padding:${pad}px ${pad}px ${pad*0.6}px}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Where am I?</div><div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>Mark body-signs and describe the field.</div></div>
-  <div style={{padding:0 ${pad}px ${pad}px}}><input value={query}onChange={e=>setQuery(e.target.value)}placeholder="dry-eyed, brittle, on a deadline…"style={{...f.mono,fontSize:14,width:"100%",padding:"14px 18px",borderRadius:12,border:1px solid ${c.border},background:c.bg,color:c.text,outline:"none",boxSizing:"border-box"}}/>
-  <div style={{marginTop:18,maxHeight:400,overflowY:"auto",background:c.bg,borderRadius:14,padding:14,display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:8}}>{allSymptoms.map(s=>{const act=sel.includes(s);return<button key={s}onClick={()=>toggle(s)}style={{...f.monoLight,fontSize:13,padding:"10px 14px",borderRadius:10,textAlign:"left",border:1px solid ${act?c.text:c.borderS},background:act?c.text:"transparent",color:act?c.bg:c.muted,cursor:"pointer",transition:"all 0.2s"}}>{s}</button>;})}</div>
-  <button onClick={()=>{setSel([]);setQuery("");}}style={{...f.mono,fontSize:12,marginTop:14,padding:"10px 18px",borderRadius:10,border:1px solid ${c.border},background:"transparent",color:c.dim,cursor:"pointer"}}>Reset</button></div></Panel>
+  <Panel><div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Where am I?</div><div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>Mark body-signs and describe the field.</div></div>
+  <div style={{padding:`0 ${pad}px ${pad}px`}}><input value={query}onChange={e=>setQuery(e.target.value)}placeholder="dry-eyed, brittle, on a deadline…"style={{...f.mono,fontSize:14,width:"100%",padding:"14px 18px",borderRadius:12,border:`1px solid ${c.border}`,background:c.bg,color:c.text,outline:"none",boxSizing:"border-box"}}/>
+  <div style={{marginTop:18,maxHeight:400,overflowY:"auto",background:c.bg,borderRadius:14,padding:14,display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:8}}>{allSymptoms.map(s=>{const act=sel.includes(s);return<button key={s}onClick={()=>toggle(s)}style={{...f.monoLight,fontSize:13,padding:"10px 14px",borderRadius:10,textAlign:"left",border:`1px solid ${act?c.text:c.borderS}`,background:act?c.text:"transparent",color:act?c.bg:c.muted,cursor:"pointer",transition:"all 0.2s"}}>{s}</button>;})}</div>
+  <button onClick={()=>{setSel([]);setQuery("");}}style={{...f.mono,fontSize:12,marginTop:14,padding:"10px 18px",borderRadius:10,border:`1px solid ${c.border}`,background:"transparent",color:c.dim,cursor:"pointer"}}>Reset</button></div></Panel>
   <Panel><div style={{padding:pad}}>{cur?<><InnerPanel><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><Label>{cur.region}</Label><div style={{...f.serif,fontSize:bp.isMobile?28:36,color:c.text,marginTop:4}}>{cur.name}</div><div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:8}}>{cur.signature}</div></div><div style={{width:12,height:12,borderRadius:"50%",background:cur.color,marginTop:8,flexShrink:0}}/></div><div style={{marginTop:18}}><Bar value={result.confidence}color={cur.color}/><Mono style={{fontSize:12,marginTop:8,display:"block"}}>Confidence: {result.confidence}%</Mono></div><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:16}}>{cur.demons.slice(0,6).map(d=><Pill key={d}onClick={()=>onOpenDemon(d)}>{d}</Pill>)}</div><Pill onClick={()=>onJump(cur.id)}color={cur.color}active style={{marginTop:16}}>Open {cur.name}</Pill></InnerPanel>
   {result.second&&<InnerPanel style={{marginTop:12}}><Mono style={{fontSize:13}}>Secondary pull: <span style={{color:c.text}}>{states[result.second.stateId].name}</span></Mono></InnerPanel>}
   <Section label="Likely flow"style={{marginTop:24}}>{cur.likelyNext.slice(0,3).map(n=>{const t=states[n.target];return<div key={n.target}onClick={()=>onJump(n.target)}style={{background:c.bg,borderRadius:12,padding:"14px 16px",marginTop:8,cursor:"pointer",transition:"background 0.2s"}}onMouseEnter={e=>e.currentTarget.style.background=c.raised}onMouseLeave={e=>e.currentTarget.style.background=c.bg}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{...f.serif,fontSize:17,color:c.text}}>{t.name}</span><span style={{...f.mono,fontSize:11,color:c.dim}}>{n.label}</span></div></div>;})}</Section>
@@ -2484,13 +2484,13 @@ const[footerIndex,setFooterIndex]=useState(0);  useEffect(()=>{if(learnMode)setJ
  const mainPad=bp.isMobile?14:bp.isTablet?24:48;
 const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 
-  return<><link href={fontUrl}rel="stylesheet"/><style>{*{box-sizing:border-box;margin:0;padding:0}body{background:${c.bg}}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}::selection{background:${c.text}22}select option{background:${c.surface};color:${c.text}}}</style>
+  return<><link href={fontUrl}rel="stylesheet"/><style>{`*{box-sizing:border-box;margin:0;padding:0}body{background:${c.bg}}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}::selection{background:${c.text}22}select option{background:${c.surface};color:${c.text}}`}</style>
   <div style={{minHeight:"100vh",color:c.text,background:c.bg,...f.monoLight}}>
-    <div style={{position:"fixed",inset:0,pointerEvents:"none",opacity:0.025,backgroundImage:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),backgroundRepeat:"repeat"}}/>
-<div style={{maxWidth:activeTab==="demons"?1760:1440,margin:"0 auto",padding:${mainPad*1.2}px ${mainPad}px}}>
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",opacity:0.025,backgroundImage:`url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,backgroundRepeat:"repeat"}}/>
+<div style={{maxWidth:activeTab==="demons"?1760:1440,margin:"0 auto",padding:`${mainPad*1.2}px ${mainPad}px`}}>
       {/* Header */}
       <div style={{marginBottom:bp.isMobile?32:56}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}><span style={{...f.mono,fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",color:c.dim,padding:"5px 12px",border:1px solid ${c.border},borderRadius:4}}>Synchronisation Atlas</span><span style={{...f.mono,fontSize:11,color:c.dim}}>v4</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}><span style={{...f.mono,fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",color:c.dim,padding:"5px 12px",border:`1px solid ${c.border}`,borderRadius:4}}>Synchronisation Atlas</span><span style={{...f.mono,fontSize:11,color:c.dim}}>v4</span></div>
         <h1 style={{...f.serif,fontSize:bp.isMobile?36:bp.isTablet?48:60,fontWeight:400,color:c.text,lineHeight:1.05,letterSpacing:"-0.02em",maxWidth:780}}>Temporal topology{bp.isMobile?" ":<br/>}& demon flow</h1>
         <p style={{...f.monoLight,fontSize:bp.isMobile?14:15,color:c.dim,marginTop:18,maxWidth:580,lineHeight:1.8}}>State fields, recursive routes, demon traffic, and numogram rite layers. Ten states of local time production. Forty-five demons.</p>
       </div>
@@ -2500,11 +2500,11 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 
       {activeTab==="demons"&&<div>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
-          <select value={stateFilter}onChange={e=>setStateFilter(e.target.value)}style={{...f.mono,fontSize:13,padding:"10px 16px",borderRadius:10,border:1px solid ${c.border},background:c.surface,color:c.text,outline:"none"}}><option value="all">All demons</option><option value="native">Native</option><option value="bridge">Bridge</option><option value="support">Support</option><option value="shadow">Shadow</option>{Object.values(states).map(s=><option key={s.id}value={s.id}>{s.name}</option>)}</select>
+          <select value={stateFilter}onChange={e=>setStateFilter(e.target.value)}style={{...f.mono,fontSize:13,padding:"10px 16px",borderRadius:10,border:`1px solid ${c.border}`,background:c.surface,color:c.text,outline:"none"}}><option value="all">All demons</option><option value="native">Native</option><option value="bridge">Bridge</option><option value="support">Support</option><option value="shadow">Shadow</option>{Object.values(states).map(s=><option key={s.id}value={s.id}>{s.name}</option>)}</select>
           <Pill active={learnMode}onClick={()=>setLearnMode(v=>!v)}>{learnMode?"Learn mode":"Free roam"}</Pill>
           {learnMode&&journey.length>1&&<><Pill onClick={()=>{setJourney(p=>{const next=p.slice(0,-1);setActiveDemon(next[next.length-1]);return next;});}}>&larr; Back</Pill><Pill onClick={()=>{setJourney([journey[0]]);setActiveDemon(journey[0]);}}>Reset</Pill></>}
         </div>
-        {learnMode&&<InnerPanel style={{marginBottom:24}}><Label>Journey</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{journey.map((d,i)=><Pill key={${d}-${i}}active={i===journey.length-1}onClick={()=>handleSelectDemon(d,true)}>{d}</Pill>)}</div></InnerPanel>}
+        {learnMode&&<InnerPanel style={{marginBottom:24}}><Label>Journey</Label><div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>{journey.map((d,i)=><Pill key={`${d}-${i}`}active={i===journey.length-1}onClick={()=>handleSelectDemon(d,true)}>{d}</Pill>)}</div></InnerPanel>}
         <div style={{display:"flex",flexDirection:"column",gap:20}}>
   <DemonConstellation
     selectedDemon={activeDemon}
@@ -2531,7 +2531,7 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 {activeTab==="grimoire"&&<Grimoire bp={bp}/>}
 {activeTab==="patterns"&&<PatternFinder bp={bp}/>}
 {activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
-      <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:1px solid ${c.borderS},display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>
+      <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:`1px solid ${c.borderS}`,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>
     </div>
   </div></>;
 }

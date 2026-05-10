@@ -154,6 +154,211 @@ function analyzeRouteInput(input){
     fragments
   };
 }
+function resolveRouteInput(input){
+  const raw = String(input || "").trim();
+
+  if(!raw){
+    return {
+      raw:"",
+      mode:"empty",
+      routes:[],
+      demons:[],
+      codes:[],
+      stateFlow:[]
+    };
+  }
+
+  const allEntries = getAllRouteEntries();
+
+  // Chain mode: Tokhatto → Puppo → Uttunul → Lurgo
+  if(raw.includes("→") || raw.includes("->")){
+    const parts = raw
+      .replaceAll("->","→")
+      .split("→")
+      .map(x=>x.trim())
+      .filter(Boolean);
+
+    const demonsFound = parts
+      .map(name => {
+        const exact = Object.keys(demons).find(d => normalizeName(d) === normalizeName(name));
+        return exact || null;
+      })
+      .filter(Boolean);
+
+    const routesFound = demonsFound.flatMap(demon =>
+      (routeOracle[demon] || []).map(route => ({
+        demon,
+        code:route.code,
+        title:route.title,
+        text:route.text,
+        mesh:demons[demon]?.mesh || "—",
+        state:demonGraph.find(x=>x.id===demon)?.state || "—"
+      }))
+    );
+
+    const stateFlow = demonsFound.map(demon => {
+      const gr = demonGraph.find(x=>x.id===demon);
+      const st = gr ? states[gr.state] : null;
+      return {
+        demon,
+        state:gr?.state || "—",
+        stateName:st?.name || "—",
+        color:st?.color || c.dim
+      };
+    });
+
+    return {
+      raw,
+      mode:"chain",
+      routes:routesFound,
+      demons:demonsFound,
+      codes:routesFound.map(r=>r.code),
+      stateFlow
+    };
+  }
+
+  // Demon name mode
+  const demonName = Object.keys(demons).find(d => normalizeName(d) === normalizeName(raw));
+  if(demonName){
+    const routesFound = (routeOracle[demonName] || []).map(route => ({
+      demon:demonName,
+      code:route.code,
+      title:route.title,
+      text:route.text,
+      mesh:demons[demonName]?.mesh || "—",
+      state:demonGraph.find(x=>x.id===demonName)?.state || "—"
+    }));
+
+    const gr = demonGraph.find(x=>x.id===demonName);
+    const st = gr ? states[gr.state] : null;
+
+    return {
+      raw,
+      mode:"demon",
+      routes:routesFound,
+      demons:[demonName],
+      codes:routesFound.map(r=>r.code),
+      stateFlow:[{
+        demon:demonName,
+        state:gr?.state || "—",
+        stateName:st?.name || "—",
+        color:st?.color || c.dim
+      }]
+    };
+  }
+
+  // Number route mode
+  const cleaned = raw.replace(/[^0-9X?]/g,"");
+  const exact = allEntries.filter(e => e.code === cleaned);
+
+  return {
+    raw,
+    mode:"route",
+    routes: exact.length ? exact : [{
+      demon:"Custom",
+      code:cleaned,
+      title:"Unregistered route",
+      text:"No exact demon route registered. Compare Lab can still detect shared fragments.",
+      mesh:"—",
+      state:"—"
+    }],
+    demons: exact.map(e=>e.demon),
+    codes:[cleaned],
+    stateFlow: exact.map(e=>{
+      const st = states[e.state];
+      return {
+        demon:e.demon,
+        state:e.state,
+        stateName:st?.name || "—",
+        color:st?.color || c.dim
+      };
+    })
+  };
+}
+
+function getRouteFragments(code){
+  const cleaned = String(code || "").replace(/[^0-9]/g,"");
+  const frags = new Set();
+
+  for(let i=0;i<cleaned.length;i++){
+    for(let j=i+2;j<=cleaned.length;j++){
+      frags.add(cleaned.slice(i,j));
+    }
+  }
+
+  return Array.from(frags);
+}
+
+function getSharedFragments(aCodes,bCodes){
+  const allEntries = getAllRouteEntries().filter(e => e.code !== "X" && e.code !== "?");
+
+  const aFrags = new Set(aCodes.flatMap(getRouteFragments));
+  const bFrags = new Set(bCodes.flatMap(getRouteFragments));
+
+  const shared = Array.from(aFrags)
+    .filter(f => bFrags.has(f))
+    .sort((a,b)=>b.length-a.length || a.localeCompare(b));
+
+  return shared.map(frag => ({
+    frag,
+    demons: allEntries.filter(e => e.code === frag)
+  }));
+}
+
+function getSharedTerminals(aCodes,bCodes){
+  const terminals = [];
+
+  aCodes.forEach(a=>{
+    bCodes.forEach(b=>{
+      const ac = String(a).replace(/[^0-9]/g,"");
+      const bc = String(b).replace(/[^0-9]/g,"");
+      const max = Math.min(ac.length,bc.length);
+      let shared = "";
+
+      for(let i=1;i<=max;i++){
+        if(ac.slice(-i) === bc.slice(-i)) shared = ac.slice(-i);
+      }
+
+      if(shared.length >= 2){
+        terminals.push(shared);
+      }
+    });
+  });
+
+  return Array.from(new Set(terminals)).sort((a,b)=>b.length-a.length);
+}
+
+function getPrefixDifference(code,sharedTerminal){
+  const cleaned = String(code || "").replace(/[^0-9]/g,"");
+  if(!sharedTerminal || !cleaned.endsWith(sharedTerminal)) return cleaned;
+  return cleaned.slice(0, cleaned.length - sharedTerminal.length) || "naked kernel";
+}
+
+function compareInputs(aInput,bInput){
+  const A = resolveRouteInput(aInput);
+  const B = resolveRouteInput(bInput);
+
+  const sharedDemons = A.demons.filter(d => B.demons.includes(d));
+  const sharedFragments = getSharedFragments(A.codes,B.codes);
+  const sharedTerminals = getSharedTerminals(A.codes,B.codes);
+  const primaryTerminal = sharedTerminals[0] || "";
+
+  const exactSharedRoutes = A.routes.filter(ar =>
+    B.routes.some(br => br.code === ar.code && br.demon === ar.demon)
+  );
+
+  return {
+    A,
+    B,
+    sharedDemons,
+    sharedFragments,
+    sharedTerminals,
+    primaryTerminal,
+    exactSharedRoutes,
+    aPrefix:A.codes.map(code=>({code,prefix:getPrefixDifference(code,primaryTerminal)})),
+    bPrefix:B.codes.map(code=>({code,prefix:getPrefixDifference(code,primaryTerminal)}))
+  };
+}
 function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)return`M ${pts[0].x} ${pts[0].y}`;let r=`M ${pts[0].x} ${pts[0].y}`;for(let i=1;i<pts.length;i++){r+=` Q ${(pts[i-1].x+pts[i].x)/2} ${(pts[i-1].y+pts[i].y)/2} ${pts[i].x} ${pts[i].y}`;}return r;}
 function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[s.id]=demonGraph.filter(d=>d.state===s.id);});const pos={};Object.values(states).forEach(s=>{const c=by[s.id]||[];const r=s.id==="liminal"?88:76;c.forEach((d,i)=>{const a=(Math.PI*2/Math.max(c.length,1))*i-Math.PI/2;pos[d.id]={x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r+40};});});return pos;}
 function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
@@ -181,6 +386,7 @@ const tabDefs=[
   {id:"demons",label:"Demons"},
   {id:"routes",label:"Routes"},
   {id:"cipher",label:"Cipher Lab"},
+  {id:"compare",label:"Compare Lab"},
   {id:"diagnosis",label:"Locate"}
 ];
 function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
@@ -566,6 +772,391 @@ function CipherLab({bp}){
                 : <InnerPanel><Mono style={{fontSize:13}}>No terminal resonance found.</Mono></InnerPanel>
               }
             </Section>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+function CompareLab({bp}){
+  const [aInput,setAInput]=useState("541890");
+  const [bInput,setBInput]=useState("71890");
+
+  const result=useMemo(()=>compareInputs(aInput,bInput),[aInput,bInput]);
+  const pad=bp.isMobile?18:28;
+
+  const aRouteCode=result.A.codes.find(x=>/^[0-9]+$/.test(x)) || "";
+  const bRouteCode=result.B.codes.find(x=>/^[0-9]+$/.test(x)) || "";
+
+  const aPts=parseRouteCode(aRouteCode);
+  const bPts=parseRouteCode(bRouteCode);
+  const aPath=buildRoutePath(aPts);
+  const bPath=buildRoutePath(bPts);
+
+  function SmallRouteCard({entry,label}){
+    const st=states[entry.state];
+    return (
+      <InnerPanel style={{marginTop:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+          <div>
+            <Label>{label} · Mesh {entry.mesh} · [{entry.code}]</Label>
+            <div style={{...f.serif,fontSize:20,color:c.text,marginTop:7}}>
+              {entry.demon}
+            </div>
+            <div style={{...f.monoLight,fontSize:12,color:c.muted,marginTop:5}}>
+              {entry.title}
+            </div>
+          </div>
+          {st && (
+            <div style={{
+              width:9,
+              height:9,
+              borderRadius:"50%",
+              background:st.color,
+              boxShadow:`0 0 16px ${st.color}55`,
+              marginTop:5,
+              flexShrink:0
+            }}/>
+          )}
+        </div>
+      </InnerPanel>
+    );
+  }
+
+  function StateFlow({flow}){
+    if(!flow.length){
+      return <Mono style={{fontSize:12}}>No state-flow registered.</Mono>;
+    }
+
+    return (
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+        {flow.map((x,i)=>(
+          <div key={`${x.demon}-${i}`} style={{
+            display:"flex",
+            alignItems:"center",
+            gap:8
+          }}>
+            <span style={{
+              ...f.mono,
+              fontSize:11,
+              padding:"7px 10px",
+              border:`1px solid ${c.border}`,
+              borderRadius:10,
+              color:c.muted,
+              background:c.bg
+            }}>
+              {x.demon}
+            </span>
+            <span style={{
+              ...f.mono,
+              fontSize:11,
+              padding:"7px 10px",
+              borderRadius:10,
+              color:c.bg,
+              background:x.color
+            }}>
+              {x.stateName}
+            </span>
+            {i < flow.length-1 && (
+              <span style={{...f.mono,color:c.dim,fontSize:12}}>→</span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:bp.isDesktop?"620px 1fr":"1fr",
+      gap:20,
+      alignItems:"start"
+    }}>
+      <Panel>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
+          <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
+            Compare Lab
+          </div>
+          <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8,lineHeight:1.7}}>
+            Compare two routes, demons, or demon chains. Finds shared kernels, terminal attractors, prefixes, and state-flow differences.
+          </div>
+        </div>
+
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
+          <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:12}}>
+            <div>
+              <Label>A</Label>
+              <textarea
+                value={aInput}
+                onChange={e=>setAInput(e.target.value)}
+                placeholder="541890 or Tokhatto → Puppo → Uttunul → Lurgo"
+                rows={4}
+                style={{
+                  ...f.mono,
+                  fontSize:14,
+                  width:"100%",
+                  marginTop:8,
+                  padding:"14px 16px",
+                  borderRadius:14,
+                  border:`1px solid ${c.border}`,
+                  background:c.bg,
+                  color:c.text,
+                  outline:"none",
+                  resize:"vertical",
+                  lineHeight:1.5
+                }}
+              />
+            </div>
+
+            <div>
+              <Label>B</Label>
+              <textarea
+                value={bInput}
+                onChange={e=>setBInput(e.target.value)}
+                placeholder="71890 or Tokhatto → Krako → Lurgo"
+                rows={4}
+                style={{
+                  ...f.mono,
+                  fontSize:14,
+                  width:"100%",
+                  marginTop:8,
+                  padding:"14px 16px",
+                  borderRadius:14,
+                  border:`1px solid ${c.border}`,
+                  background:c.bg,
+                  color:c.text,
+                  outline:"none",
+                  resize:"vertical",
+                  lineHeight:1.5
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:14}}>
+            <Pill onClick={()=>{setAInput("541890");setBInput("71890");}}>
+              Tokhatto / Puppo
+            </Pill>
+            <Pill onClick={()=>{setAInput("541890");setBInput("271890");}}>
+              Tokhatto / Duoddod
+            </Pill>
+            <Pill onClick={()=>{setAInput("Tokhatto → Puppo → Uttunul → Lurgo");setBInput("Tokhatto → Krako → Katak → Ummnu → Muntuk → Numko → Sukugool → Ixigool → Lurgo");}}>
+              Deep / Ordeal
+            </Pill>
+          </div>
+
+          <div style={{marginTop:18}}>
+            <svg
+              viewBox="0 0 1000 2050"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                width:"100%",
+                display:"block",
+                borderRadius:14,
+                background:"#000000"
+              }}
+            >
+              <image
+                href="/Numogram-blackgreen.jpg"
+                x="50"
+                y="50"
+                width="900"
+                height="1950"
+                preserveAspectRatio="xMidYMid meet"
+              />
+
+              {aPath && (
+                <>
+                  <path
+                    d={aPath}
+                    fill="none"
+                    stroke="#FF6B1A"
+                    strokeWidth={24}
+                    strokeLinecap="round"
+                    strokeOpacity={0.16}
+                  />
+                  <path
+                    d={aPath}
+                    fill="none"
+                    stroke="#FF8838"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray="11 9"
+                    strokeOpacity={0.9}
+                  />
+                </>
+              )}
+
+              {bPath && (
+                <>
+                  <path
+                    d={bPath}
+                    fill="none"
+                    stroke="#69D2E7"
+                    strokeWidth={16}
+                    strokeLinecap="round"
+                    strokeOpacity={0.18}
+                  />
+                  <path
+                    d={bPath}
+                    fill="none"
+                    stroke="#A7F3FF"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    strokeDasharray="5 8"
+                    strokeOpacity={0.9}
+                  />
+                </>
+              )}
+
+              {aPts.map((pt,i)=>(
+                <g key={`a-${pt.digit}-${i}`}>
+                  <circle cx={pt.x} cy={pt.y} r={13} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text x={pt.x} y={pt.y+5} textAnchor="middle" fontSize={13} fill="#0C0C0B" style={{...f.mono,fontWeight:600}}>
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+
+              {bPts.map((pt,i)=>(
+                <g key={`b-${pt.digit}-${i}`}>
+                  <circle cx={pt.x+24} cy={pt.y} r={12} fill="#A7F3FF" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text x={pt.x+24} y={pt.y+4} textAnchor="middle" fontSize={12} fill="#0C0C0B" style={{...f.mono,fontWeight:600}}>
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
+      </Panel>
+
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        <Panel>
+          <div style={{padding:pad}}>
+            <Label>Primary shared terminal</Label>
+            <div style={{...f.serif,fontSize:36,color:c.text,marginTop:8}}>
+              {result.primaryTerminal || "—"}
+            </div>
+
+            {result.primaryTerminal && (
+              <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:12,lineHeight:1.7}}>
+                Both sides terminate through the same kernel. The difference is in the carrier-prefix.
+              </div>
+            )}
+
+            <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:12,marginTop:18}}>
+              <InnerPanel>
+                <Label>A prefixes</Label>
+                <div style={{marginTop:10,display:"grid",gap:7}}>
+                  {result.aPrefix.map((x,i)=>(
+                    <Mono key={i} style={{fontSize:12}}>
+                      {x.code} = <span style={{color:c.text}}>{x.prefix}</span> + {result.primaryTerminal || "—"}
+                    </Mono>
+                  ))}
+                </div>
+              </InnerPanel>
+
+              <InnerPanel>
+                <Label>B prefixes</Label>
+                <div style={{marginTop:10,display:"grid",gap:7}}>
+                  {result.bPrefix.map((x,i)=>(
+                    <Mono key={i} style={{fontSize:12}}>
+                      {x.code} = <span style={{color:c.text}}>{x.prefix}</span> + {result.primaryTerminal || "—"}
+                    </Mono>
+                  ))}
+                </div>
+              </InnerPanel>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="A exact routes">
+              {result.A.routes.length
+                ? result.A.routes.map((e,i)=><SmallRouteCard key={`a-${e.demon}-${e.code}-${i}`} entry={e} label="A"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No route found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="B exact routes" style={{marginTop:24}}>
+              {result.B.routes.length
+                ? result.B.routes.map((e,i)=><SmallRouteCard key={`b-${e.demon}-${e.code}-${i}`} entry={e} label="B"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No route found.</Mono></InnerPanel>
+              }
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="Shared demons">
+              {result.sharedDemons.length
+                ? <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                    {result.sharedDemons.map(d=><Pill key={d} active>{d}</Pill>)}
+                  </div>
+                : <InnerPanel><Mono style={{fontSize:13}}>No exact shared demons.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Shared route fragments" style={{marginTop:24}}>
+              {result.sharedFragments.length
+                ? result.sharedFragments.slice(0,16).map(item=>(
+                    <InnerPanel key={item.frag} style={{marginTop:10}}>
+                      <Label>Fragment</Label>
+                      <div style={{...f.serif,fontSize:24,color:c.text,marginTop:6}}>
+                        {item.frag}
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
+                        {item.demons.length
+                          ? item.demons.map(e=>(
+                              <Pill key={`${item.frag}-${e.demon}`}>
+                                {e.demon}
+                              </Pill>
+                            ))
+                          : <Mono style={{fontSize:12}}>Unregistered fragment</Mono>
+                        }
+                      </div>
+                    </InnerPanel>
+                  ))
+                : <InnerPanel><Mono style={{fontSize:13}}>No shared fragments found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Shared terminal patterns" style={{marginTop:24}}>
+              {result.sharedTerminals.length
+                ? <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                    {result.sharedTerminals.map(t=><Pill key={t} active>{t}</Pill>)}
+                  </div>
+                : <InnerPanel><Mono style={{fontSize:13}}>No shared terminal pattern.</Mono></InnerPanel>
+              }
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="State-flow A">
+              <StateFlow flow={result.A.stateFlow}/>
+            </Section>
+
+            <Section label="State-flow B" style={{marginTop:24}}>
+              <StateFlow flow={result.B.stateFlow}/>
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Label>Interpretive verdict</Label>
+            <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:12,lineHeight:1.8}}>
+              {result.primaryTerminal
+                ? <>These two inputs share <span style={{color:c.text}}>{result.primaryTerminal}</span> as a terminal kernel. Read the difference by their prefixes: A enters through <span style={{color:c.text}}>{result.aPrefix[0]?.prefix}</span>, while B enters through <span style={{color:c.text}}>{result.bPrefix[0]?.prefix}</span>. Same attractor, different carrier-world.</>
+                : <>No strong terminal kernel was found. Read these as divergent route-families unless a smaller shared fragment appears above.</>
+              }
+            </div>
           </div>
         </Panel>
       </div>

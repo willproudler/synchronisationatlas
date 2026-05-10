@@ -59,6 +59,14 @@ const routeDigitAnchors = {
   "9": { x: 545, y: 1700 },
 };
 
+// Filled-wedge currents — the shaded "rivers" between zones.
+// Each wedge has two endpoints; we draw it as a quadrilateral
+// path widening in the middle, filled with the stipple pattern.
+// Format: [from, to, fromWidth, toWidth, bend, pointer (which end has arrowhead)]
+
+ 
+// Build a wedge path: from one endpoint widening to the other,
+// curved by `bend`. Uses two cubic curves forming a leaf/tongue shape.
 
 const allSymptoms = Array.from(new Set(Object.values(states).flatMap(s => s.body)));
 
@@ -161,16 +169,21 @@ function resolveRouteInput(input){
 
   const allEntries = getAllRouteEntries();
 
-  // Chain mode: accepts arrows, commas, lines, mesh numbers.
-  // Examples:
-  // Tokhatto, Puppo, Uttunul, Lurgo
-  // Tokhatto → Puppo → Uttunul → Lurgo
-  // 10 21 36 00
-  // mesh 10, mesh 21, mesh 36, mesh 00
-  const possibleChain=parseDemonChainInput(raw);
+  // Chain mode: Tokhatto → Puppo → Uttunul → Lurgo
+  if(raw.includes("→") || raw.includes("->")){
+    const parts = raw
+      .replaceAll("->","→")
+      .split("→")
+      .map(x=>x.trim())
+      .filter(Boolean);
 
-  if(possibleChain.length >= 2){
-    const demonsFound = possibleChain;
+    const demonsFound = parts
+      .map(name => {
+        const exact = Object.keys(demons).find(d => normalizeName(d) === normalizeName(name));
+        return exact || null;
+      })
+      .filter(Boolean);
+
     const routesFound = demonsFound.flatMap(demon =>
       (routeOracle[demon] || []).map(route => ({
         demon,
@@ -359,52 +372,7 @@ function getDemonRouteEntries(demonName){
     state:demonGraph.find(x=>x.id===demonName)?.state || "—"
   }));
 }
-function findDemonByLooseToken(token){
-  const raw=String(token || "").trim();
-  if(!raw) return null;
 
-  const cleaned=normalizeName(raw);
-  const meshClean=raw.replace(/^mesh\s*/i,"").replace(/^#/,"").padStart(2,"0");
-
-  const byName=Object.keys(demons).find(d=>normalizeName(d)===cleaned);
-  if(byName) return byName;
-
-  const byMesh=Object.keys(demons).find(d=>String(demons[d]?.mesh).padStart(2,"0")===meshClean);
-  if(byMesh) return byMesh;
-
-  const partial=Object.keys(demons).find(d=>normalizeName(d).includes(cleaned));
-  if(partial) return partial;
-
-  return null;
-}
-
-function parseDemonChainInput(input){
-  const raw=String(input || "")
-    .replaceAll("→", ",")
-    .replaceAll("->", ",")
-    .replaceAll("/", ",")
-    .replaceAll("\n", ",");
-
-  let tokens=raw.split(",").map(x=>x.trim()).filter(Boolean);
-
-  // If there are no commas, try space-separated mesh numbers:
-  // "10 21 36 00"
-  if(tokens.length===1 && /^(\s*(mesh\s*)?\d{1,2}\s*)+$/.test(tokens[0])){
-    tokens=tokens[0].split(/\s+/).filter(Boolean);
-  }
-
-  // If there are no commas, try demon names separated by double spaces.
-  // Single spaces are kept because names like "Mur Mur" exist.
-  if(tokens.length===1 && tokens[0].includes("  ")){
-    tokens=tokens[0].split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
-  }
-
-  return tokens.map(findDemonByLooseToken).filter(Boolean);
-}
-
-function chainToPlain(chain){
-  return (chain || []).join(" → ");
-}
 function getDemonStateInfo(demonName){
   const gr=demonGraph.find(x=>x.id===demonName);
   const st=gr ? states[gr.state] : null;
@@ -552,33 +520,7 @@ function createSavedReading({name,chain,tags,notes,analysis}){
     exportText:makeChainExport(name,analysis)
   };
 }
-function createSavedReadingFromRoutes({name,routes,tags=[],notes=""}){
-  const routeEntries=(routes || []).filter(Boolean);
-  const demonsInChain=Array.from(new Set(routeEntries.map(r=>r.demon).filter(d=>d && d !== "Custom")));
-  const analysis=analyzeDemonChain(demonsInChain);
 
-  // Preserve the exact discovered routes, not only demon-derived routes.
-  const mergedAnalysis={
-    ...analysis,
-    routeEntries:routeEntries.length ? routeEntries : analysis.routeEntries,
-    codes:routeEntries.length ? routeEntries.map(r=>r.code).filter(Boolean) : analysis.codes
-  };
-
-  return createSavedReading({
-    name:name || "Saved Route Reading",
-    chain:demonsInChain,
-    tags,
-    notes,
-    analysis:mergedAnalysis
-  });
-}
-
-function saveRouteReadingToGrimoire({name,routes,tags=[],notes=""}){
-  const existing=loadSavedReadings();
-  const reading=createSavedReadingFromRoutes({name,routes,tags,notes});
-  saveReadingsToStorage([reading,...existing]);
-  return reading;
-}
 function parseTagsInput(input){
   return String(input || "")
     .split(",")
@@ -797,7 +739,7 @@ function DemonConstellation({selectedDemon,onSelectDemon,stateFilter,onStateJump
   <div style={{padding:`0 ${pad}px ${pad}px`}}><div style={{display:"grid",gridTemplateColumns:flowG,gap:20}}>
     <Section label={`Incoming → ${cur.id}`}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{inc.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!inc.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
     <Section label="Reciprocal"><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{Array.from(biS).map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}color="#C9B06B"active>{id}</Pill>)}{!biS.size&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
-    <Section label={`${cur.id} → Outgoing`}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{out.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}</div></Section>
+    <Section label={`${cur.id} → Outgoing`}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{out.map(id=><Pill key={id}onClick={()=>onSelectDemon(id)}>{id}</Pill>)}{!out.length&&<Mono style={{fontSize:12}}>—</Mono>}</div></Section>
   </div></div></Panel>;
 }
 
@@ -820,40 +762,143 @@ function DemonInspector({demonName,onOpenState,onOpenDemon,bp}){
 
 // ── NUMOGRAM ROUTES LAB ───────────────────────────────────────────
 
-
 function NumogramRoutesLab({bp}){
-  const dn = Object.keys(routeOracle).sort();
-  const [sd,setSd] = useState(dn[0] || "Lurgo");
-  const routes = routeOracle[sd] || [];
-  const [src,setSrc] = useState(routes[0]?.code || null);
-  const [savedMsg,setSavedMsg] = useState("");
+  const dn=Object.keys(routeOracle).sort();const[sd,setSd]=useState(dn[0]||"Lurgo");const routes=routeOracle[sd]||[];const[src,setSrc]=useState(routes[0]?.code||null);useEffect(()=>{setSrc((routeOracle[sd]||[])[0]?.code||null);},[sd]);const sr=routes.find(r=>r.code===src)||routes[0]||null;const pts=sr?parseRouteCode(sr.code):[];const rp=buildRoutePath(pts);const pad=bp.isMobile?16:28;
+ return<div style={{
+  display:"grid",
+  gridTemplateColumns:bp.isDesktop?"620px 1fr":"1fr",
+  gap:20,
+  alignItems:"start"
+}}>
+  <Panel><div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}><div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>Numogram</div><div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>Rites traced through zones, currents, gates, and channels.</div></div>
+  <div style={{padding:`0 ${pad*0.6}px ${pad*0.6}px`}}><svg
+  viewBox="0 0 1000 2050"
+  preserveAspectRatio="xMidYMid meet"
+  style={{
+    width: "100%",
+    display: "block",
+    borderRadius: 14,
+    background: "#000000",
+  }}
+>
+  {/* The hand-drawn numogram as backdrop */}
+  <image
+    href="/Numogram-blackgreen.jpg"
+    x="50"
+    y="50"
+    width="900"
+    height="1950"
+    preserveAspectRatio="xMidYMid meet"
+  />
+ 
+  {/* Active route overlay in orange, drawn on top */}
+  {rp && (
+    <>
+      {/* Soft orange halo behind the route */}
+      <path
+        d={rp}
+        fill="none"
+        stroke="#FF6B1A"
+        strokeWidth={22}
+        strokeLinecap="round"
+        strokeOpacity={0.18}
+      />
+      {/* Animated dashed line */}
+      <path
+        d={rp}
+        fill="none"
+        stroke="#FF8838"
+        strokeWidth={5}
+        strokeLinecap="round"
+        strokeDasharray="11 9"
+        strokeOpacity={0.95}
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          from="0"
+          to="-40"
+          dur="1.6s"
+          repeatCount="indefinite"
+        />
+      </path>
+    </>
+  )}
+ 
+  {/* Route dots — bright orange, pulsing, numbered */}
+  {pts.map((pt, i) => (
+    <g key={`${pt.digit}-${i}`}>
+      <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}>
+        <animate
+          attributeName="r"
+          values="24;34;24"
+          dur="2s"
+          repeatCount="indefinite"
+        />
+      </circle>
+      <circle
+        cx={pt.x}
+        cy={pt.y}
+        r={14}
+        fill="#FF8838"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+      />
+      <text
+        x={pt.x}
+        y={pt.y + 5}
+        textAnchor="middle"
+        fontSize={14}
+        fill="#0C0C0B"
+        style={{ ...f.mono, fontWeight: 600 }}
+      >
+        {i + 1}
+      </text>
+    </g>
+  ))}
+</svg></div></Panel>
+  <div style={{display:"flex",flexDirection:"column",gap:20}}>
+    <Panel><div style={{padding:pad}}><Section label="Demon"><select value={sd}onChange={e=>setSd(e.target.value)}style={{...f.mono,fontSize:14,width:"100%",padding:"12px 16px",borderRadius:12,border:`1px solid ${c.border}`,background:c.bg,color:c.text,outline:"none",marginTop:4}}>{dn.map(n=><option key={n}value={n}>{n}</option>)}</select></Section><Section label="Routes"style={{marginTop:24}}><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>{routes.length?routes.map((it,i)=><Pill key={`${it.code}-${i}`}active={src===it.code}onClick={()=>setSrc(it.code)}>{it.code}</Pill>):<Mono style={{fontSize:12}}>No routes</Mono>}</div></Section></div></Panel>
+    <Panel style={{flex:1}}><div style={{padding:pad}}>{sr?<><Label>Route [{sr.code}]</Label><div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>{sr.title}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>{sr.text}</div><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>{String(sr.code).split("").map((ch,i)=><span key={i}style={{...f.mono,fontSize:14,width:34,height:34,display:"inline-flex",alignItems:"center",justifyContent:"center",border:`1px solid ${c.border}`,borderRadius:10,color:c.muted}}>{ch}</span>)}</div></>:<Mono style={{fontSize:13}}>No route selected.</Mono>}</div></Panel>
+  </div></div>;
+}
+function CipherLab({bp}){
+  const [input,setInput]=useState("541890");
+  const result=useMemo(()=>analyzeRouteInput(input),[input]);
+  const pts=parseRouteCode(result.cleaned);
+  const rp=buildRoutePath(pts);
+  const pad=bp.isMobile?18:28;
 
-  useEffect(()=>{
-    setSrc((routeOracle[sd] || [])[0]?.code || null);
-  },[sd]);
-
-  const sr = routes.find(r=>r.code===src) || routes[0] || null;
-  const pts = sr ? parseRouteCode(sr.code) : [];
-  const rp = buildRoutePath(pts);
-  const pad = bp.isMobile ? 16 : 28;
-
-  function saveCurrentRoute(){
-    if(!sr) return;
-
-    saveRouteReadingToGrimoire({
-      name:`${sd} — ${sr.code}`,
-      routes:[{
-        ...sr,
-        demon:sd,
-        mesh:demons[sd]?.mesh || "—",
-        state:demonGraph.find(x=>x.id===sd)?.state || "—"
-      }],
-      tags:["Routes"],
-      notes:"Saved from Routes tab."
-    });
-
-    setSavedMsg("Saved");
-    setTimeout(()=>setSavedMsg(""),1400);
+  function RouteCard({entry,label}){
+    const st=states[entry.state];
+    return (
+      <InnerPanel style={{marginTop:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+          <div>
+            <Label>{label} · Mesh {entry.mesh} · Route [{entry.code}]</Label>
+            <div style={{...f.serif,fontSize:22,color:c.text,marginTop:8}}>
+              {entry.demon}
+            </div>
+            <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:6}}>
+              {entry.title}
+            </div>
+          </div>
+          {st && (
+            <div style={{
+              width:10,
+              height:10,
+              borderRadius:"50%",
+              background:st.color,
+              boxShadow:`0 0 18px ${st.color}55`,
+              marginTop:5,
+              flexShrink:0
+            }}/>
+          )}
+        </div>
+        <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:12,lineHeight:1.7}}>
+          {entry.text}
+        </div>
+      </InnerPanel>
+    );
   }
 
   return (
@@ -866,183 +911,169 @@ function NumogramRoutesLab({bp}){
       <Panel>
         <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
           <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
-            Numogram
+            Cipher Lab
           </div>
           <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8}}>
-            Rites traced through zones, currents, gates, and channels.
+            Type a route number and reveal exact, embedded, terminal, and carrier demons.
           </div>
         </div>
 
-        <div style={{padding:`0 ${pad*0.6}px ${pad*0.6}px`}}>
-          <svg
-            viewBox="0 0 1000 2050"
-            preserveAspectRatio="xMidYMid meet"
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
+          <input
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            placeholder="541890"
             style={{
+              ...f.mono,
+              fontSize:18,
               width:"100%",
-              display:"block",
+              padding:"16px 18px",
               borderRadius:14,
-              background:"#000000"
+              border:`1px solid ${c.border}`,
+              background:c.bg,
+              color:c.text,
+              outline:"none",
+              letterSpacing:"0.08em"
             }}
-          >
-            <image
-              href="/Numogram-blackgreen.jpg"
-              x="50"
-              y="50"
-              width="900"
-              height="1950"
-              preserveAspectRatio="xMidYMid meet"
-            />
+          />
 
-            {rp && (
-              <>
-                <path
-                  d={rp}
-                  fill="none"
-                  stroke="#FF6B1A"
-                  strokeWidth={22}
-                  strokeLinecap="round"
-                  strokeOpacity={0.18}
-                />
-                <path
-                  d={rp}
-                  fill="none"
-                  stroke="#FF8838"
-                  strokeWidth={5}
-                  strokeLinecap="round"
-                  strokeDasharray="11 9"
-                  strokeOpacity={0.95}
-                >
-                  <animate
-                    attributeName="stroke-dashoffset"
-                    from="0"
-                    to="-40"
-                    dur="1.6s"
-                    repeatCount="indefinite"
-                  />
-                </path>
-              </>
-            )}
-
-            {pts.map((pt,i)=>(
-              <g key={`${pt.digit}-${i}`}>
-                <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}>
-                  <animate
-                    attributeName="r"
-                    values="24;34;24"
-                    dur="2s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-                <circle
-                  cx={pt.x}
-                  cy={pt.y}
-                  r={14}
-                  fill="#FF8838"
-                  stroke="#FFFFFF"
-                  strokeWidth={2}
-                />
-                <text
-                  x={pt.x}
-                  y={pt.y+5}
-                  textAnchor="middle"
-                  fontSize={14}
-                  fill="#0C0C0B"
-                  style={{...f.mono,fontWeight:600}}
-                >
-                  {i+1}
-                </text>
-              </g>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:14}}>
+            {["1890","541890","41890","71890","271890","72541890","89","890"].map(x=>(
+              <Pill key={x} active={result.cleaned===x} onClick={()=>setInput(x)}>
+                {x}
+              </Pill>
             ))}
-          </svg>
+          </div>
+
+          <div style={{marginTop:18}}>
+            <svg
+              viewBox="0 0 1000 2050"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                width:"100%",
+                display:"block",
+                borderRadius:14,
+                background:"#000000"
+              }}
+            >
+              <image
+                href="/Numogram-blackgreen.jpg"
+                x="50"
+                y="50"
+                width="900"
+                height="1950"
+                preserveAspectRatio="xMidYMid meet"
+              />
+
+              {rp && (
+                <>
+                  <path
+                    d={rp}
+                    fill="none"
+                    stroke="#FF6B1A"
+                    strokeWidth={22}
+                    strokeLinecap="round"
+                    strokeOpacity={0.18}
+                  />
+                  <path
+                    d={rp}
+                    fill="none"
+                    stroke="#FF8838"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray="11 9"
+                    strokeOpacity={0.95}
+                  >
+                    <animate
+                      attributeName="stroke-dashoffset"
+                      from="0"
+                      to="-40"
+                      dur="1.6s"
+                      repeatCount="indefinite"
+                    />
+                  </path>
+                </>
+              )}
+
+              {pts.map((pt,i)=>(
+                <g key={`${pt.digit}-${i}`}>
+                  <circle cx={pt.x} cy={pt.y} r={28} fill="#FF6B1A" opacity={0.22}/>
+                  <circle cx={pt.x} cy={pt.y} r={14} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text
+                    x={pt.x}
+                    y={pt.y+5}
+                    textAnchor="middle"
+                    fontSize={14}
+                    fill="#0C0C0B"
+                    style={{...f.mono,fontWeight:600}}
+                  >
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
         </div>
       </Panel>
 
       <div style={{display:"flex",flexDirection:"column",gap:20}}>
         <Panel>
           <div style={{padding:pad}}>
-            <Section label="Demon">
-              <select
-                value={sd}
-                onChange={e=>setSd(e.target.value)}
-                style={{
+            <Label>Cleaned route</Label>
+            <div style={{...f.serif,fontSize:34,color:c.text,marginTop:8}}>
+              {result.cleaned || "—"}
+            </div>
+
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:16}}>
+              {result.cleaned.split("").map((ch,i)=>(
+                <span key={`${ch}-${i}`} style={{
                   ...f.mono,
                   fontSize:14,
-                  width:"100%",
-                  padding:"12px 16px",
-                  borderRadius:12,
+                  width:36,
+                  height:36,
+                  display:"inline-flex",
+                  alignItems:"center",
+                  justifyContent:"center",
                   border:`1px solid ${c.border}`,
-                  background:c.bg,
-                  color:c.text,
-                  outline:"none",
-                  marginTop:4
-                }}
-              >
-                {dn.map(n=>(
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </Section>
-
-            <Section label="Routes" style={{marginTop:24}}>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>
-                {routes.length ? routes.map((it,i)=>(
-                  <Pill
-                    key={`${it.code}-${i}`}
-                    active={src===it.code}
-                    onClick={()=>setSrc(it.code)}
-                  >
-                    {it.code}
-                  </Pill>
-                )) : (
-                  <Mono style={{fontSize:12}}>No routes</Mono>
-                )}
-              </div>
-            </Section>
+                  borderRadius:10,
+                  color:c.muted
+                }}>
+                  {ch}
+                </span>
+              ))}
+            </div>
           </div>
         </Panel>
 
-        <Panel style={{flex:1}}>
+        <Panel>
           <div style={{padding:pad}}>
-            {sr ? (
-              <>
-                <Label>Route [{sr.code}]</Label>
-                <div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>
-                  {sr.title}
-                </div>
-                <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>
-                  {sr.text}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>
-                  {String(sr.code).split("").map((ch,i)=>(
-                    <span
-                      key={i}
-                      style={{
-                        ...f.mono,
-                        fontSize:14,
-                        width:34,
-                        height:34,
-                        display:"inline-flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-                        border:`1px solid ${c.border}`,
-                        borderRadius:10,
-                        color:c.muted
-                      }}
-                    >
-                      {ch}
-                    </span>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <Mono style={{fontSize:13}}>No route selected.</Mono>
-            )}
+            <Section label="Exact match">
+              {result.exact.length
+                ? result.exact.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Exact"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No exact match.</Mono></InnerPanel>
+              }
+            </Section>
 
-            <div style={{marginTop:18}}>
-              <Pill active onClick={saveCurrentRoute}>
-                {savedMsg || "Save route"}
-              </Pill>
-            </div>
+            <Section label="Embedded inside this route" style={{marginTop:24}}>
+              {result.contains.length
+                ? result.contains.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Embedded"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No embedded route found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Routes that contain this route" style={{marginTop:24}}>
+              {result.containedBy.length
+                ? result.containedBy.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Carrier"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No larger carrier route found.</Mono></InnerPanel>
+              }
+            </Section>
+
+            <Section label="Same terminal pattern" style={{marginTop:24}}>
+              {result.sameTerminal.length
+                ? result.sameTerminal.map(e=><RouteCard key={`${e.demon}-${e.code}`} entry={e} label="Terminal resonance"/>)
+                : <InnerPanel><Mono style={{fontSize:13}}>No terminal resonance found.</Mono></InnerPanel>
+              }
+            </Section>
           </div>
         </Panel>
       </div>
@@ -1052,7 +1083,6 @@ function NumogramRoutesLab({bp}){
 function CompareLab({bp}){
   const [aInput,setAInput]=useState("541890");
   const [bInput,setBInput]=useState("71890");
-  const [savedMsg,setSavedMsg]=useState("");
 
   const result=useMemo(()=>compareInputs(aInput,bInput),[aInput,bInput]);
   const pad=bp.isMobile?18:28;
@@ -1064,20 +1094,6 @@ function CompareLab({bp}){
   const bPts=parseRouteCode(bRouteCode);
   const aPath=buildRoutePath(aPts);
   const bPath=buildRoutePath(bPts);
-
-  function saveComparison(){
-    const routes=[...result.A.routes,...result.B.routes];
-
-    saveRouteReadingToGrimoire({
-      name:`Compare ${result.primaryTerminal || "routes"}`,
-      routes,
-      tags:["Compare"],
-      notes:`Saved from Compare Lab.\nA: ${aInput}\nB: ${bInput}`
-    });
-
-    setSavedMsg("Saved");
-    setTimeout(()=>setSavedMsg(""),1400);
-  }
 
   function SmallRouteCard({entry,label}){
     const st=states[entry.state];
@@ -1176,7 +1192,7 @@ function CompareLab({bp}){
               <textarea
                 value={aInput}
                 onChange={e=>setAInput(e.target.value)}
-                placeholder="541890 or Tokhatto, Puppo, Uttunul, Lurgo"
+                placeholder="541890 or Tokhatto → Puppo → Uttunul → Lurgo"
                 rows={4}
                 style={{
                   ...f.mono,
@@ -1200,7 +1216,7 @@ function CompareLab({bp}){
               <textarea
                 value={bInput}
                 onChange={e=>setBInput(e.target.value)}
-                placeholder="71890 or Tokhatto, Krako, Lurgo"
+                placeholder="71890 or Tokhatto → Krako → Lurgo"
                 rows={4}
                 style={{
                   ...f.mono,
@@ -1227,7 +1243,7 @@ function CompareLab({bp}){
             <Pill onClick={()=>{setAInput("541890");setBInput("271890");}}>
               Tokhatto / Duoddod
             </Pill>
-            <Pill onClick={()=>{setAInput("Tokhatto, Puppo, Uttunul, Lurgo");setBInput("Tokhatto, Krako, Katak, Ummnu, Muntuk, Numko, Sukugool, Ixigool, Lurgo");}}>
+            <Pill onClick={()=>{setAInput("Tokhatto → Puppo → Uttunul → Lurgo");setBInput("Tokhatto → Krako → Katak → Ummnu → Muntuk → Numko → Sukugool → Ixigool → Lurgo");}}>
               Deep / Ordeal
             </Pill>
           </div>
@@ -1331,12 +1347,6 @@ function CompareLab({bp}){
                 Both sides terminate through the same kernel. The difference is in the carrier-prefix.
               </div>
             )}
-
-            <div style={{marginTop:18}}>
-              <Pill active onClick={saveComparison}>
-                {savedMsg || "Save comparison"}
-              </Pill>
-            </div>
 
             <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:12,marginTop:18}}>
               <InnerPanel>
@@ -1462,7 +1472,6 @@ function ChainBuilder({bp}){
     return am-bm;
   });
 
-  const [chainInput,setChainInput]=useState("Tokhatto, Puppo, Uttunul, Lurgo");
   const [chain,setChain]=useState(["Tokhatto","Puppo","Uttunul","Lurgo"]);
   const [selected,setSelected]=useState("Tokhatto");
   const [chainName,setChainName]=useState("Tokhatto Descent with Lurgo Seed");
@@ -1474,12 +1483,9 @@ function ChainBuilder({bp}){
   const analysis=useMemo(()=>analyzeDemonChain(chain),[chain]);
   const pad=bp.isMobile?18:28;
 
-  function applyTypedChain(){
-    const parsed=parseDemonChainInput(chainInput);
-    if(parsed.length){
-      setChain(parsed);
-    }
-  }
+  const firstNumericCode=analysis.codes[0] || "";
+  const pts=parseRouteCode(firstNumericCode);
+  const path=buildRoutePath(pts);
 
   function addDemon(name){
     setChain(prev=>[...prev,name]);
@@ -1498,23 +1504,21 @@ function ChainBuilder({bp}){
       return next;
     });
   }
+function saveToGrimoire(){
+  const existing=loadSavedReadings();
+  const reading=createSavedReading({
+    name:chainName,
+    chain,
+    tags:parseTagsInput(tagInput),
+    notes,
+    analysis
+  });
 
-  function saveToGrimoire(){
-    const existing=loadSavedReadings();
-    const reading=createSavedReading({
-      name:chainName,
-      chain,
-      tags:parseTagsInput(tagInput),
-      notes,
-      analysis
-    });
-
-    const next=[reading,...existing];
-    saveReadingsToStorage(next);
-    setSavedMsg("Saved to Grimoire");
-    setTimeout(()=>setSavedMsg(""),1600);
-  }
-
+  const next=[reading,...existing];
+  saveReadingsToStorage(next);
+  setSavedMsg("Saved to Grimoire");
+  setTimeout(()=>setSavedMsg(""),1600);
+}
   async function copyExport(){
     const text=makeChainExport(chainName,analysis);
     try{
@@ -1596,82 +1600,48 @@ function ChainBuilder({bp}){
               }}
             />
           </Section>
+<Section label="Tags" style={{marginTop:22}}>
+  <input
+    value={tagInput}
+    onChange={e=>setTagInput(e.target.value)}
+    placeholder="Soft Control, Luke, Charisma, 1890"
+    style={{
+      ...f.mono,
+      fontSize:14,
+      width:"100%",
+      padding:"14px 16px",
+      borderRadius:14,
+      border:`1px solid ${c.border}`,
+      background:c.bg,
+      color:c.text,
+      outline:"none",
+      marginTop:8
+    }}
+  />
+</Section>
 
-          <Section label="Tags" style={{marginTop:22}}>
-            <input
-              value={tagInput}
-              onChange={e=>setTagInput(e.target.value)}
-              placeholder="Soft Control, Luke, Charisma, 1890"
-              style={{
-                ...f.mono,
-                fontSize:14,
-                width:"100%",
-                padding:"14px 16px",
-                borderRadius:14,
-                border:`1px solid ${c.border}`,
-                background:c.bg,
-                color:c.text,
-                outline:"none",
-                marginTop:8
-              }}
-            />
-          </Section>
-
-          <Section label="Notes" style={{marginTop:22}}>
-            <textarea
-              value={notes}
-              onChange={e=>setNotes(e.target.value)}
-              placeholder="What did this chain reveal?"
-              rows={4}
-              style={{
-                ...f.monoLight,
-                fontSize:14,
-                width:"100%",
-                padding:"14px 16px",
-                borderRadius:14,
-                border:`1px solid ${c.border}`,
-                background:c.bg,
-                color:c.text,
-                outline:"none",
-                resize:"vertical",
-                lineHeight:1.6,
-                marginTop:8
-              }}
-            />
-          </Section>
-
-          <Section label="Type chain" style={{marginTop:22}}>
-            <textarea
-              value={chainInput}
-              onChange={e=>setChainInput(e.target.value)}
-              placeholder="Tokhatto, Puppo, Uttunul, Lurgo — or 10 21 36 00"
-              rows={3}
-              style={{
-                ...f.mono,
-                fontSize:14,
-                width:"100%",
-                padding:"14px 16px",
-                borderRadius:14,
-                border:`1px solid ${c.border}`,
-                background:c.bg,
-                color:c.text,
-                outline:"none",
-                resize:"vertical",
-                lineHeight:1.6,
-                marginTop:8
-              }}
-            />
-
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-              <Pill active onClick={applyTypedChain}>Apply chain</Pill>
-              <Pill onClick={()=>setChainInput(chainToPlain(chain))}>Load current</Pill>
-            </div>
-
-            <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:10,lineHeight:1.6}}>
-              Accepts commas, arrows, new lines, or mesh numbers. Use commas for demon names.
-            </div>
-          </Section>
-
+<Section label="Notes" style={{marginTop:22}}>
+  <textarea
+    value={notes}
+    onChange={e=>setNotes(e.target.value)}
+    placeholder="What did this chain reveal?"
+    rows={4}
+    style={{
+      ...f.monoLight,
+      fontSize:14,
+      width:"100%",
+      padding:"14px 16px",
+      borderRadius:14,
+      border:`1px solid ${c.border}`,
+      background:c.bg,
+      color:c.text,
+      outline:"none",
+      resize:"vertical",
+      lineHeight:1.6,
+      marginTop:8
+    }}
+  />
+</Section>
           <Section label="Add demon" style={{marginTop:22}}>
             <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr auto",gap:10,marginTop:8}}>
               <select
@@ -1741,18 +1711,51 @@ function ChainBuilder({bp}){
                     </div>
 
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      <button onClick={()=>move(i,-1)} style={{
-                        ...f.mono,fontSize:11,padding:"7px 9px",borderRadius:9,
-                        border:`1px solid ${c.border}`,background:"transparent",color:c.muted,cursor:"pointer"
-                      }}>↑</button>
-                      <button onClick={()=>move(i,1)} style={{
-                        ...f.mono,fontSize:11,padding:"7px 9px",borderRadius:9,
-                        border:`1px solid ${c.border}`,background:"transparent",color:c.muted,cursor:"pointer"
-                      }}>↓</button>
-                      <button onClick={()=>removeAt(i)} style={{
-                        ...f.mono,fontSize:11,padding:"7px 9px",borderRadius:9,
-                        border:`1px solid ${c.border}`,background:"transparent",color:c.dim,cursor:"pointer"
-                      }}>Remove</button>
+                      <button
+                        onClick={()=>move(i,-1)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.muted,
+                          cursor:"pointer"
+                        }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={()=>move(i,1)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.muted,
+                          cursor:"pointer"
+                        }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={()=>removeAt(i)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.dim,
+                          cursor:"pointer"
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
                 );
@@ -1776,6 +1779,67 @@ function ChainBuilder({bp}){
               </Pill>
             </div>
           </Section>
+
+          <Section label="First numeric route preview" style={{marginTop:24}}>
+            <svg
+              viewBox="0 0 1000 2050"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                width:"100%",
+                display:"block",
+                borderRadius:14,
+                background:"#000000",
+                marginTop:10
+              }}
+            >
+              <image
+                href="/Numogram-blackgreen.jpg"
+                x="50"
+                y="50"
+                width="900"
+                height="1950"
+                preserveAspectRatio="xMidYMid meet"
+              />
+
+              {path && (
+                <>
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#FF6B1A"
+                    strokeWidth={22}
+                    strokeLinecap="round"
+                    strokeOpacity={0.18}
+                  />
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#FF8838"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray="11 9"
+                    strokeOpacity={0.95}
+                  />
+                </>
+              )}
+
+              {pts.map((pt,i)=>(
+                <g key={`${pt.digit}-${i}`}>
+                  <circle cx={pt.x} cy={pt.y} r={13} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text
+                    x={pt.x}
+                    y={pt.y+5}
+                    textAnchor="middle"
+                    fontSize={13}
+                    fill="#0C0C0B"
+                    style={{...f.mono,fontWeight:600}}
+                  >
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </Section>
         </div>
       </Panel>
 
@@ -1794,14 +1858,14 @@ function ChainBuilder({bp}){
               </div>
             </div>
 
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
-              <Pill active onClick={copyExport}>
-                {copied ? "Copied" : "Copy reading"}
-              </Pill>
-              <Pill active onClick={saveToGrimoire}>
-                {savedMsg || "Save to Grimoire"}
-              </Pill>
-            </div>
+           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
+  <Pill active onClick={copyExport}>
+    {copied ? "Copied" : "Copy reading"}
+  </Pill>
+  <Pill active onClick={saveToGrimoire}>
+    {savedMsg || "Save to Grimoire"}
+  </Pill>
+</div>
           </div>
         </Panel>
 
@@ -1811,15 +1875,33 @@ function ChainBuilder({bp}){
               {analysis.stateFlow.length ? (
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
                   {analysis.stateFlow.map((x,i)=>(
-                    <div key={`${x.demon}-${i}`} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <div key={`${x.demon}-${i}`} style={{
+                      display:"flex",
+                      alignItems:"center",
+                      gap:8,
+                      flexWrap:"wrap"
+                    }}>
                       <span style={{
-                        ...f.mono,fontSize:11,padding:"7px 10px",
-                        border:`1px solid ${c.border}`,borderRadius:10,color:c.muted,background:c.bg
-                      }}>{x.demon}</span>
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        border:`1px solid ${c.border}`,
+                        borderRadius:10,
+                        color:c.muted,
+                        background:c.bg
+                      }}>
+                        {x.demon}
+                      </span>
                       <span style={{
-                        ...f.mono,fontSize:11,padding:"7px 10px",
-                        borderRadius:10,color:c.bg,background:x.color
-                      }}>{x.stateName}</span>
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        borderRadius:10,
+                        color:c.bg,
+                        background:x.color
+                      }}>
+                        {x.stateName}
+                      </span>
                       {i < analysis.stateFlow.length-1 && (
                         <span style={{...f.mono,color:c.dim,fontSize:12}}>→</span>
                       )}
@@ -1853,13 +1935,19 @@ function ChainBuilder({bp}){
               {analysis.sharedFragments.length ? (
                 analysis.sharedFragments.slice(0,16).map(item=>(
                   <InnerPanel key={item.frag} style={{marginTop:10}}>
-                    <Label>Fragment · {item.count} hits</Label>
-                    <div style={{...f.serif,fontSize:26,color:c.text,marginTop:6}}>
-                      {item.frag}
+                    <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+                      <div>
+                        <Label>Fragment · {item.count} hits</Label>
+                        <div style={{...f.serif,fontSize:26,color:c.text,marginTop:6}}>
+                          {item.frag}
+                        </div>
+                      </div>
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
                       {item.demons.length ? item.demons.map(e=>(
-                        <Pill key={`${item.frag}-${e.demon}`}>{e.demon}</Pill>
+                        <Pill key={`${item.frag}-${e.demon}`}>
+                          {e.demon}
+                        </Pill>
                       )) : (
                         <Mono style={{fontSize:12}}>Unregistered fragment</Mono>
                       )}
@@ -1908,8 +1996,7 @@ function ChainBuilder({bp}){
       </div>
     </div>
   );
-}
-function Grimoire({bp}){
+}function Grimoire({bp}){
   const [readings,setReadings]=useState([]);
   const [query,setQuery]=useState("");
   const [tagFilter,setTagFilter]=useState("all");
@@ -1990,8 +2077,8 @@ function Grimoire({bp}){
   return (
     <div style={{
       display:"grid",
-      gridTemplateColumns:bp.isDesktop?"520px minmax(0,1fr)":"1fr",
-      gap:28,
+      gridTemplateColumns:bp.isDesktop?"0.9fr 1.1fr":"1fr",
+      gap:20,
       alignItems:"start"
     }}>
       <Panel>
@@ -2022,27 +2109,15 @@ function Grimoire({bp}){
             }}
           />
 
-          <div style={{marginTop:12}}>
-            <select
-              value={tagFilter}
-              onChange={e=>setTagFilter(e.target.value)}
-              style={{
-                ...f.mono,
-                fontSize:13,
-                width:"100%",
-                padding:"12px 14px",
-                borderRadius:12,
-                border:`1px solid ${c.border}`,
-                background:c.bg,
-                color:c.text,
-                outline:"none"
-              }}
-            >
-              <option value="all">All tags</option>
-              {tags.map(t=>(
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+            <Pill active={tagFilter==="all"} onClick={()=>setTagFilter("all")}>
+              All tags
+            </Pill>
+            {tags.map(t=>(
+              <Pill key={t} active={tagFilter===t} onClick={()=>setTagFilter(t)}>
+                {t}
+              </Pill>
+            ))}
           </div>
 
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
@@ -2079,43 +2154,33 @@ function Grimoire({bp}){
                     transition:"all 0.2s"
                   }}
                 >
-                  <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{...f.serif,fontSize:19,color:c.text,lineHeight:1.25}}>
-                        {(r.chain || []).length ? (r.chain || []).join(" → ") : r.name}
+                  <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+                    <div>
+                      <div style={{...f.serif,fontSize:21,color:c.text}}>
+                        {r.name}
                       </div>
-
-                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:8,lineHeight:1.5}}>
-                        Kernel: {r.primaryKernel || "—"} · {(r.chain || []).length} demons · {new Date(r.createdAt).toLocaleDateString()}
+                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:5}}>
+                        Kernel: {r.primaryKernel || "—"} · {new Date(r.createdAt).toLocaleDateString()}
                       </div>
-
-                      {(r.tags || []).length > 0 && (
-                        <div style={{
-                          ...f.mono,
-                          fontSize:10,
-                          color:c.dim,
-                          marginTop:8,
-                          whiteSpace:"nowrap",
-                          overflow:"hidden",
-                          textOverflow:"ellipsis",
-                          maxWidth:"100%"
-                        }}>
-                          {(r.tags || []).join(" · ")}
-                        </div>
-                      )}
                     </div>
-
-                    <div style={{
-                      ...f.mono,
-                      fontSize:11,
-                      color:c.bg,
-                      background:c.text,
-                      borderRadius:999,
-                      padding:"5px 8px",
-                      flexShrink:0
-                    }}>
-                      {r.primaryKernel || "—"}
+                    <div style={{...f.mono,fontSize:11,color:c.dim}}>
+                      {(r.chain || []).length} demons
                     </div>
+                  </div>
+
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                    {(r.tags || []).map(t=>(
+                      <span key={t} style={{
+                        ...f.mono,
+                        fontSize:10,
+                        color:c.bg,
+                        background:c.text,
+                        padding:"5px 8px",
+                        borderRadius:999
+                      }}>
+                        {t}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )) : (
@@ -2132,13 +2197,15 @@ function Grimoire({bp}){
         <div style={{padding:pad}}>
           {active ? (
             <>
-              <div>
-                <Label>Saved reading</Label>
-                <div style={{...f.serif,fontSize:bp.isMobile?28:34,color:c.text,marginTop:8,lineHeight:1.18}}>
-                  {(active.chain || []).length ? (active.chain || []).join(" → ") : active.name}
-                </div>
-                <div style={{...f.monoLight,fontSize:13,color:c.dim,marginTop:10}}>
-                  {active.name} · Created {new Date(active.createdAt).toLocaleString()}
+              <div style={{display:"flex",justifyContent:"space-between",gap:14,alignItems:"flex-start"}}>
+                <div>
+                  <Label>Saved reading</Label>
+                  <div style={{...f.serif,fontSize:bp.isMobile?30:40,color:c.text,marginTop:8,lineHeight:1.1}}>
+                    {active.name}
+                  </div>
+                  <div style={{...f.monoLight,fontSize:13,color:c.dim,marginTop:10}}>
+                    Created {new Date(active.createdAt).toLocaleString()}
+                  </div>
                 </div>
               </div>
 
@@ -2160,11 +2227,13 @@ function Grimoire({bp}){
               </Section>
 
               <Section label="Tags" style={{marginTop:22}}>
-                <InnerPanel>
-                  <div style={{...f.monoLight,fontSize:13,color:c.muted,lineHeight:1.7}}>
-                    {(active.tags || []).length ? active.tags.join(" · ") : "—"}
-                  </div>
-                </InnerPanel>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                  {(active.tags || []).length ? active.tags.map(t=>(
+                    <Pill key={t} active onClick={()=>setTagFilter(t)}>
+                      {t}
+                    </Pill>
+                  )) : <Mono style={{fontSize:13}}>—</Mono>}
+                </div>
               </Section>
 
               <Section label="Primary kernel" style={{marginTop:22}}>
@@ -2251,8 +2320,7 @@ function Grimoire({bp}){
       </Panel>
     </div>
   );
-}
-function PatternFinder({bp}){
+}function PatternFinder({bp}){
   const [readings,setReadings]=useState([]);
   const [tagFilter,setTagFilter]=useState("all");
   const pad=bp.isMobile?18:28;
@@ -2435,30 +2503,28 @@ const[learnMode,setLearnMode]=useState(false);
 const[journey,setJourney]=useState(["Lurgo"]);
 const[activeTab,setActiveTab]=useState("atlas");
 
-const[footerIndex,setFooterIndex]=useState(0);
-
-  useEffect(()=>{if(learnMode)setJourney(p=>p[p.length-1]===activeDemon?p:[...p,activeDemon]);},[activeDemon,learnMode]);
+const[mapView,setMapView]=useState("topology");
+const[showStateFields,setShowStateFields]=useState(true);
+const[hoverDemon,setHoverDemon]=useState(null);
+const[traceDemon,setTraceDemon]=useState(null);
+const[notes,setNotes]=useState([]);
+const[constellationMode,setConstellationMode]=useState(false);
+const[selectedConstellation,setSelectedConstellation]=useState([]);
+const[footerIndex,setFooterIndex]=useState(0);  useEffect(()=>{if(learnMode)setJourney(p=>p[p.length-1]===activeDemon?p:[...p,activeDemon]);},[activeDemon,learnMode]);
   useEffect(()=>{if(learnMode)setJourney([activeDemon]);},[learnMode]);
   useEffect(()=>{
-    const t=setInterval(()=>setFooterIndex(i=>(i+1)%footerSignals.length),5000);
-    return()=>clearInterval(t);
-  },[]);
+
+  const t=setInterval(()=>setFooterIndex(i=>(i+1)%footerSignals.length),5000);
+
+  return()=>clearInterval(t);
+
+},[]);
 
   const handleSelectDemon=useCallback((id,force=false)=>{if(!learnMode||force){setActiveDemon(id);return;}const cur=demonGraph.find(d=>d.id===activeDemon);if(!cur){setActiveDemon(id);return;}const inc=demonGraph.filter(d=>d.links.includes(cur.id)).map(d=>d.id);const allowed=new Set([cur.id,...cur.links,...inc]);if(allowed.has(id))setActiveDemon(id);},[activeDemon,learnMode]);
+ const mainPad=bp.isMobile?14:bp.isTablet?24:48;
+const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 
-  const mainPad=bp.isMobile?14:bp.isTablet?24:48;
-  const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
-
-  return <><link href={fontUrl} rel="stylesheet"/><style>{`
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:${c.bg}}
-button,input,textarea,select{font:inherit}
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}
-::selection{background:${c.text}22}
-select option{background:${c.surface};color:${c.text}}
-`}</style>
+  return<><link href={fontUrl}rel="stylesheet"/><style>{`*{box-sizing:border-box;margin:0;padding:0}body{background:${c.bg}}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}::selection{background:${c.text}22}select option{background:${c.surface};color:${c.text}}`}</style>
   <div style={{minHeight:"100vh",color:c.text,background:c.bg,...f.monoLight}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",opacity:0.025,backgroundImage:`url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,backgroundRepeat:"repeat"}}/>
 <div style={{maxWidth:activeTab==="demons"?1760:1560,margin:"0 auto",padding:`${mainPad}px ${mainPad}px`}}>

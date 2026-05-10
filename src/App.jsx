@@ -99,7 +99,13 @@ function InnerPanel({children,style:s}){return<div style={{background:c.bg,borde
 
 // ── TAB BAR ───────────────────────────────────────────────────────
 
-const tabDefs=[{id:"atlas",label:"States"},{id:"demons",label:"Demons"},{id:"routes",label:"Routes"},{id:"diagnosis",label:"Locate"}];
+const tabDefs=[
+  {id:"atlas",label:"States"},
+  {id:"demons",label:"Demons"},
+  {id:"routes",label:"Routes"},
+  {id:"cipher",label:"Cipher Lab"},
+  {id:"diagnosis",label:"Locate"}
+];
 function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
 
 // ── STATE MAP ─────────────────────────────────────────────────────

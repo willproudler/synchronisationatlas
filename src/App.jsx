@@ -387,7 +387,52 @@ function getDemonStateInfo(demonName){
     note:demons[demonName]?.note || "—"
   };
 }
+function findDemonByLooseToken(token){
+  const raw=String(token || "").trim();
+  if(!raw) return null;
 
+  const cleaned=normalizeName(raw);
+  const meshClean=raw.replace(/^mesh\s*/i,"").replace(/^#/,"").padStart(2,"0");
+
+  const byName=Object.keys(demons).find(d=>normalizeName(d)===cleaned);
+  if(byName) return byName;
+
+  const byMesh=Object.keys(demons).find(d=>String(demons[d]?.mesh).padStart(2,"0")===meshClean);
+  if(byMesh) return byMesh;
+
+  const partial=Object.keys(demons).find(d=>normalizeName(d).includes(cleaned));
+  if(partial) return partial;
+
+  return null;
+}
+
+function parseDemonChainInput(input){
+  const raw=String(input || "")
+    .replaceAll("→", ",")
+    .replaceAll("->", ",")
+    .replaceAll("/", ",")
+    .replaceAll("\n", ",");
+
+  let tokens=raw.split(",").map(x=>x.trim()).filter(Boolean);
+
+  // If there are no commas, try space-separated mesh numbers:
+  // "10 21 36 00"
+  if(tokens.length===1 && /^(\s*(mesh\s*)?\d{1,2}\s*)+$/.test(tokens[0])){
+    tokens=tokens[0].split(/\s+/).filter(Boolean);
+  }
+
+  // If there are no commas, try demon names separated by double spaces.
+  // Single spaces are kept because names like "Mur Mur" exist.
+  if(tokens.length===1 && tokens[0].includes("  ")){
+    tokens=tokens[0].split(/\s{2,}/).map(x=>x.trim()).filter(Boolean);
+  }
+
+  return tokens.map(findDemonByLooseToken).filter(Boolean);
+}
+
+function chainToPlain(chain){
+  return (chain || []).join(" → ");
+}
 function analyzeDemonChain(chain){
   const demonsInChain=(chain || []).filter(Boolean);
   const routeEntries=demonsInChain.flatMap(getDemonRouteEntries);

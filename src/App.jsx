@@ -169,20 +169,23 @@ function resolveRouteInput(input){
 
   const allEntries = getAllRouteEntries();
 
-  // Chain mode: Tokhatto → Puppo → Uttunul → Lurgo
-  if(raw.includes("→") || raw.includes("->")){
-    const parts = raw
-      .replaceAll("->","→")
-      .split("→")
-      .map(x=>x.trim())
-      .filter(Boolean);
+  // Chain mode: accepts arrows, commas, lines, mesh numbers.
 
-    const demonsFound = parts
-      .map(name => {
-        const exact = Object.keys(demons).find(d => normalizeName(d) === normalizeName(name));
-        return exact || null;
-      })
-      .filter(Boolean);
+  // Examples:
+
+  // Tokhatto, Puppo, Uttunul, Lurgo
+
+  // Tokhatto → Puppo → Uttunul → Lurgo
+
+  // 10 21 36 00
+
+  // mesh 10, mesh 21, mesh 36, mesh 00
+
+  const possibleChain=parseDemonChainInput(raw);
+
+  if(possibleChain.length >= 2){
+
+    const demonsFound = possibleChain;
 
     const routesFound = demonsFound.flatMap(demon =>
       (routeOracle[demon] || []).map(route => ({
@@ -565,7 +568,32 @@ function createSavedReading({name,chain,tags,notes,analysis}){
     exportText:makeChainExport(name,analysis)
   };
 }
+function createSavedReadingFromRoutes({name,routes,tags=[],notes=""}){
+  const routeEntries=(routes || []).filter(Boolean);
+  const demonsInChain=Array.from(new Set(routeEntries.map(r=>r.demon).filter(d=>d && d !== "Custom")));
+  const analysis=analyzeDemonChain(demonsInChain);
 
+  const mergedAnalysis={
+    ...analysis,
+    routeEntries:routeEntries.length ? routeEntries : analysis.routeEntries,
+    codes:routeEntries.length ? routeEntries.map(r=>r.code).filter(Boolean) : analysis.codes
+  };
+
+  return createSavedReading({
+    name:name || "Saved Route Reading",
+    chain:demonsInChain,
+    tags,
+    notes,
+    analysis:mergedAnalysis
+  });
+}
+
+function saveRouteReadingToGrimoire({name,routes,tags=[],notes=""}){
+  const existing=loadSavedReadings();
+  const reading=createSavedReadingFromRoutes({name,routes,tags,notes});
+  saveReadingsToStorage([reading,...existing]);
+  return reading;
+}
 function parseTagsInput(input){
   return String(input || "")
     .split(",")
@@ -808,8 +836,32 @@ function DemonInspector({demonName,onOpenState,onOpenDemon,bp}){
 // ── NUMOGRAM ROUTES LAB ───────────────────────────────────────────
 
 function NumogramRoutesLab({bp}){
-  const dn=Object.keys(routeOracle).sort();const[sd,setSd]=useState(dn[0]||"Lurgo");const routes=routeOracle[sd]||[];const[src,setSrc]=useState(routes[0]?.code||null);useEffect(()=>{setSrc((routeOracle[sd]||[])[0]?.code||null);},[sd]);const sr=routes.find(r=>r.code===src)||routes[0]||null;const pts=sr?parseRouteCode(sr.code):[];const rp=buildRoutePath(pts);const pad=bp.isMobile?16:28;
- return<div style={{
+  const dn=Object.keys(routeOracle).sort();
+  const [sd,setSd]=useState(dn[0]||"Lurgo");
+  const routes=routeOracle[sd]||[];
+  const [src,setSrc]=useState(routes[0]?.code||null);
+  const [savedMsg,setSavedMsg]=useState("");
+
+  useEffect(()=>{
+    setSrc((routeOracle[sd]||[])[0]?.code||null);
+  },[sd]);
+
+  const sr=routes.find(r=>r.code===src)||routes[0]||null;
+  const pts=sr?parseRouteCode(sr.code):[];
+  const rp=buildRoutePath(pts);
+  const pad=bp.isMobile?16:28;
+
+  function saveCurrentRoute(){
+    if(!sr) return;
+    saveRouteReadingToGrimoire({
+      name:`${sd} — ${sr.code}`,
+      routes:[{...sr,demon:sd,mesh:demons[sd]?.mesh || "—",state:demonGraph.find(x=>x.id===sd)?.state || "—"}],
+      tags:["Routes"],
+      notes:"Saved from Routes tab."
+    });
+    setSavedMsg("Saved");
+    setTimeout(()=>setSavedMsg(""),1400);
+  } return<div style={{
   display:"grid",
   gridTemplateColumns:bp.isDesktop?"620px 1fr":"1fr",
   gap:20,
@@ -903,11 +955,52 @@ function NumogramRoutesLab({bp}){
 </svg></div></Panel>
   <div style={{display:"flex",flexDirection:"column",gap:20}}>
     <Panel><div style={{padding:pad}}><Section label="Demon"><select value={sd}onChange={e=>setSd(e.target.value)}style={{...f.mono,fontSize:14,width:"100%",padding:"12px 16px",borderRadius:12,border:`1px solid ${c.border}`,background:c.bg,color:c.text,outline:"none",marginTop:4}}>{dn.map(n=><option key={n}value={n}>{n}</option>)}</select></Section><Section label="Routes"style={{marginTop:24}}><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>{routes.length?routes.map((it,i)=><Pill key={`${it.code}-${i}`}active={src===it.code}onClick={()=>setSrc(it.code)}>{it.code}</Pill>):<Mono style={{fontSize:12}}>No routes</Mono>}</div></Section></div></Panel>
-    <Panel style={{flex:1}}><div style={{padding:pad}}>{sr?<><Label>Route [{sr.code}]</Label><div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>{sr.title}</div><div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>{sr.text}</div><div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>{String(sr.code).split("").map((ch,i)=><span key={i}style={{...f.mono,fontSize:14,width:34,height:34,display:"inline-flex",alignItems:"center",justifyContent:"center",border:`1px solid ${c.border}`,borderRadius:10,color:c.muted}}>{ch}</span>)}</div></>:<Mono style={{fontSize:13}}>No route selected.</Mono>}</div></Panel>
+    <Panel style={{flex:1}}>
+  <div style={{padding:pad}}>
+    {sr ? (
+      <>
+        <Label>Route [{sr.code}]</Label>
+        <div style={{...f.serif,fontSize:24,color:c.text,marginTop:10}}>
+          {sr.title}
+        </div>
+        <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:14,lineHeight:1.8}}>
+          {sr.text}
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:20}}>
+          {String(sr.code).split("").map((ch,i)=>(
+            <span key={i} style={{
+              ...f.mono,
+              fontSize:14,
+              width:34,
+              height:34,
+              display:"inline-flex",
+              alignItems:"center",
+              justifyContent:"center",
+              border:`1px solid ${c.border}`,
+              borderRadius:10,
+              color:c.muted
+            }}>
+              {ch}
+            </span>
+          ))}
+        </div>
+
+        <div style={{marginTop:18}}>
+          <Pill active onClick={saveCurrentRoute}>
+            {savedMsg || "Save route"}
+          </Pill>
+        </div>
+      </>
+    ) : (
+      <Mono style={{fontSize:13}}>No route selected.</Mono>
+    )}
+  </div>
+</Panel>
   </div></div>;
 }
 function CipherLab({bp}){
   const [input,setInput]=useState("541890");
+  const [savedMsg,setSavedMsg]=useState("");
   const result=useMemo(()=>analyzeRouteInput(input),[input]);
   const pts=parseRouteCode(result.cleaned);
   const rp=buildRoutePath(pts);
@@ -945,7 +1038,24 @@ function CipherLab({bp}){
       </InnerPanel>
     );
   }
+  function saveCipherFindings(){
+    const routes=[
+      ...result.exact,
+      ...result.contains,
+      ...result.containedBy,
+      ...result.sameTerminal
+    ];
 
+    saveRouteReadingToGrimoire({
+      name:`Cipher ${result.cleaned || input}`,
+      routes,
+      tags:["Cipher"],
+      notes:`Saved from Cipher Lab for ${result.cleaned || input}.`
+    });
+
+    setSavedMsg("Saved");
+    setTimeout(()=>setSavedMsg(""),1400);
+  }
   return (
     <div style={{
       display:"grid",
@@ -988,6 +1098,12 @@ function CipherLab({bp}){
                 {x}
               </Pill>
             ))}
+          </div>
+
+          <div style={{marginTop:14}}>
+            <Pill active onClick={saveCipherFindings}>
+              {savedMsg || "Save cipher findings"}
+            </Pill>
           </div>
 
           <div style={{marginTop:18}}>
@@ -1128,6 +1244,7 @@ function CipherLab({bp}){
 function CompareLab({bp}){
   const [aInput,setAInput]=useState("541890");
   const [bInput,setBInput]=useState("71890");
+  const [savedMsg,setSavedMsg]=useState("");
 
   const result=useMemo(()=>compareInputs(aInput,bInput),[aInput,bInput]);
   const pad=bp.isMobile?18:28;
@@ -1212,7 +1329,19 @@ function CompareLab({bp}){
       </div>
     );
   }
+  function saveComparison(){
+    const routes=[...result.A.routes,...result.B.routes];
 
+    saveRouteReadingToGrimoire({
+      name:`Compare ${result.primaryTerminal || "routes"}`,
+      routes,
+      tags:["Compare"],
+      notes:`Saved from Compare Lab. A: ${aInput}\nB: ${bInput}`
+    });
+
+    setSavedMsg("Saved");
+    setTimeout(()=>setSavedMsg(""),1400);
+  }
   return (
     <div style={{
       display:"grid",
@@ -1392,7 +1521,11 @@ function CompareLab({bp}){
                 Both sides terminate through the same kernel. The difference is in the carrier-prefix.
               </div>
             )}
-
+            <div style={{marginTop:18}}>
+              <Pill active onClick={saveComparison}>
+                {savedMsg || "Save comparison"}
+              </Pill>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr 1fr",gap:12,marginTop:18}}>
               <InnerPanel>
                 <Label>A prefixes</Label>
@@ -1520,6 +1653,7 @@ function ChainBuilder({bp}){
   const [chain,setChain]=useState(["Tokhatto","Puppo","Uttunul","Lurgo"]);
   const [selected,setSelected]=useState("Tokhatto");
   const [chainName,setChainName]=useState("Tokhatto Descent with Lurgo Seed");
+  const [chainInput,setChainInput]=useState("Tokhatto, Puppo, Uttunul, Lurgo");
   const [copied,setCopied]=useState(false);
   const [tagInput,setTagInput]=useState("Soft Control, Lurgo Kernel");
   const [notes,setNotes]=useState("");
@@ -1531,6 +1665,18 @@ function ChainBuilder({bp}){
   const firstNumericCode=analysis.codes[0] || "";
   const pts=parseRouteCode(firstNumericCode);
   const path=buildRoutePath(pts);
+
+    function applyTypedChain(){
+
+    const parsed=parseDemonChainInput(chainInput);
+
+    if(parsed.length){
+
+      setChain(parsed);
+
+    }
+
+  }
 
   function addDemon(name){
     setChain(prev=>[...prev,name]);
@@ -1687,6 +1833,35 @@ function saveToGrimoire(){
     }}
   />
 </Section>
+<Section label="Type chain" style={{marginTop:22}}>
+  <textarea
+    value={chainInput}
+    onChange={e=>setChainInput(e.target.value)}
+    placeholder="Tokhatto, Puppo, Uttunul, Lurgo — or 10 21 36 00"
+    rows={3}
+    style={{
+      ...f.mono,
+      fontSize:14,
+      width:"100%",
+      padding:"14px 16px",
+      borderRadius:14,
+      border:`1px solid ${c.border}`,
+      background:c.bg,
+      color:c.text,
+      outline:"none",
+      resize:"vertical",
+      lineHeight:1.6,
+      marginTop:8
+    }}
+  />
+  <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+    <Pill active onClick={applyTypedChain}>Apply chain</Pill>
+    <Pill onClick={()=>setChainInput(chainToPlain(chain))}>Load current</Pill>
+  </div>
+  <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:10,lineHeight:1.6}}>
+    Accepts names, commas, arrows, new lines, or mesh numbers.
+  </div>
+</Section>
           <Section label="Add demon" style={{marginTop:22}}>
             <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr auto",gap:10,marginTop:8}}>
               <select
@@ -1825,7 +2000,9 @@ function saveToGrimoire(){
             </div>
           </Section>
 
-          <Section label="First numeric route preview" style={{marginTop:24}}>
+         <Section label="First numeric route preview" style={{marginTop:24}}>
+          <div style={{maxHeight:360,overflow:"hidden",borderRadius:14,marginTop:10}}>
+
             <svg
               viewBox="0 0 1000 2050"
               preserveAspectRatio="xMidYMid meet"
@@ -1834,7 +2011,7 @@ function saveToGrimoire(){
                 display:"block",
                 borderRadius:14,
                 background:"#000000",
-                marginTop:10
+                transform:"translateY(-120px)"
               }}
             >
               <image
@@ -1884,6 +2061,7 @@ function saveToGrimoire(){
                 </g>
               ))}
             </svg>
+            </div>
           </Section>
         </div>
       </Panel>
@@ -2119,11 +2297,11 @@ function saveToGrimoire(){
   const visible=readings.filter(r=>readingMatchesSearch(r,query,tagFilter));
   const active=readings.find(r=>r.id===activeId) || visible[0] || null;
 
-  return (
+   return (
     <div style={{
       display:"grid",
-      gridTemplateColumns:bp.isDesktop?"0.9fr 1.1fr":"1fr",
-      gap:20,
+      gridTemplateColumns:bp.isDesktop?"520px minmax(0,1fr)":"1fr",
+      gap:28,
       alignItems:"start"
     }}>
       <Panel>
@@ -2154,15 +2332,27 @@ function saveToGrimoire(){
             }}
           />
 
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-            <Pill active={tagFilter==="all"} onClick={()=>setTagFilter("all")}>
-              All tags
-            </Pill>
-            {tags.map(t=>(
-              <Pill key={t} active={tagFilter===t} onClick={()=>setTagFilter(t)}>
-                {t}
-              </Pill>
-            ))}
+                   <div style={{marginTop:12}}>
+            <select
+              value={tagFilter}
+              onChange={e=>setTagFilter(e.target.value)}
+              style={{
+                ...f.mono,
+                fontSize:13,
+                width:"100%",
+                padding:"12px 14px",
+                borderRadius:12,
+                border:`1px solid ${c.border}`,
+                background:c.bg,
+                color:c.text,
+                outline:"none"
+              }}
+            >
+              <option value="all">All tags</option>
+              {tags.map(t=>(
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
 
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
@@ -2199,34 +2389,42 @@ function saveToGrimoire(){
                     transition:"all 0.2s"
                   }}
                 >
-                  <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
-                    <div>
-                      <div style={{...f.serif,fontSize:21,color:c.text}}>
-                        {r.name}
+                                    <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{...f.serif,fontSize:19,color:c.text,lineHeight:1.25}}>
+                        {(r.chain || []).length ? (r.chain || []).join(" → ") : r.name}
                       </div>
-                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:5}}>
-                        Kernel: {r.primaryKernel || "—"} · {new Date(r.createdAt).toLocaleDateString()}
+                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:8,lineHeight:1.5}}>
+                        Kernel: {r.primaryKernel || "—"} · {(r.chain || []).length} demons · {new Date(r.createdAt).toLocaleDateString()}
                       </div>
+                      {(r.tags || []).length > 0 && (
+                        <div style={{
+                          ...f.mono,
+                          fontSize:10,
+                          color:c.dim,
+                          marginTop:8,
+                          whiteSpace:"nowrap",
+                          overflow:"hidden",
+                          textOverflow:"ellipsis",
+                          maxWidth:"100%"
+                        }}>
+                          {(r.tags || []).join(" · ")}
+                        </div>
+                      )}
                     </div>
-                    <div style={{...f.mono,fontSize:11,color:c.dim}}>
-                      {(r.chain || []).length} demons
+                    <div style={{
+                      ...f.mono,
+                      fontSize:11,
+                      color:c.bg,
+                      background:c.text,
+                      borderRadius:999,
+                      padding:"5px 8px",
+                      flexShrink:0
+                    }}>
+                      {r.primaryKernel || "—"}
                     </div>
                   </div>
 
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                    {(r.tags || []).map(t=>(
-                      <span key={t} style={{
-                        ...f.mono,
-                        fontSize:10,
-                        color:c.bg,
-                        background:c.text,
-                        padding:"5px 8px",
-                        borderRadius:999
-                      }}>
-                        {t}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               )) : (
                 <InnerPanel>
@@ -2245,8 +2443,8 @@ function saveToGrimoire(){
               <div style={{display:"flex",justifyContent:"space-between",gap:14,alignItems:"flex-start"}}>
                 <div>
                   <Label>Saved reading</Label>
-                  <div style={{...f.serif,fontSize:bp.isMobile?30:40,color:c.text,marginTop:8,lineHeight:1.1}}>
-                    {active.name}
+                                   <div style={{...f.serif,fontSize:bp.isMobile?28:34,color:c.text,marginTop:8,lineHeight:1.18}}>
+                    {(active.chain || []).length ? (active.chain || []).join(" → ") : active.name}
                   </div>
                   <div style={{...f.monoLight,fontSize:13,color:c.dim,marginTop:10}}>
                     Created {new Date(active.createdAt).toLocaleString()}
@@ -2271,14 +2469,12 @@ function saveToGrimoire(){
                 </InnerPanel>
               </Section>
 
-              <Section label="Tags" style={{marginTop:22}}>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
-                  {(active.tags || []).length ? active.tags.map(t=>(
-                    <Pill key={t} active onClick={()=>setTagFilter(t)}>
-                      {t}
-                    </Pill>
-                  )) : <Mono style={{fontSize:13}}>—</Mono>}
-                </div>
+                           <Section label="Tags" style={{marginTop:22}}>
+                <InnerPanel>
+                  <div style={{...f.monoLight,fontSize:13,color:c.muted,lineHeight:1.7}}>
+                    {(active.tags || []).length ? active.tags.join(" · ") : "—"}
+                  </div>
+                </InnerPanel>
               </Section>
 
               <Section label="Primary kernel" style={{marginTop:22}}>
@@ -2569,7 +2765,25 @@ const[footerIndex,setFooterIndex]=useState(0);  useEffect(()=>{if(learnMode)setJ
  const mainPad=bp.isMobile?14:bp.isTablet?24:48;
 const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 
-  return<><link href={fontUrl}rel="stylesheet"/><style>{`*{box-sizing:border-box;margin:0;padding:0}body{background:${c.bg}}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}::selection{background:${c.text}22}select option{background:${c.surface};color:${c.text}}`}</style>
+  return<><link href={fontUrl}rel="stylesheet"/><style>{`
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{background:${c.bg}}
+
+button,input,textarea,select{font:inherit}
+
+::-webkit-scrollbar{width:5px;height:5px}
+
+::-webkit-scrollbar-track{background:transparent}
+
+::-webkit-scrollbar-thumb{background:${c.border};border-radius:3px}
+
+::selection{background:${c.text}22}
+
+select option{background:${c.surface};color:${c.text}}
+
+`}</style>
   <div style={{minHeight:"100vh",color:c.text,background:c.bg,...f.monoLight}}>
     <div style={{position:"fixed",inset:0,pointerEvents:"none",opacity:0.025,backgroundImage:`url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,backgroundRepeat:"repeat"}}/>
 <div style={{maxWidth:activeTab==="demons"?1760:1560,margin:"0 auto",padding:`${mainPad}px ${mainPad}px`}}>

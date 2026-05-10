@@ -2000,10 +2000,11 @@ function saveToGrimoire(){
             </div>
           </Section>
 
-         <Section label="First numeric route preview" style={{marginTop:24}}>
-          <div style={{maxHeight:360,overflow:"hidden",borderRadius:14,marginTop:10}}>
+     <Section label="First numeric route preview" style={{marginTop:24}}>
 
-            <svg
+  <div style={{borderRadius:14,marginTop:10}}>
+
+    <svg
               viewBox="0 0 1000 2050"
               preserveAspectRatio="xMidYMid meet"
               style={{
@@ -2011,7 +2012,6 @@ function saveToGrimoire(){
                 display:"block",
                 borderRadius:14,
                 background:"#000000",
-                transform:"translateY(-120px)"
               }}
             >
               <image

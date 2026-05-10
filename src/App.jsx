@@ -651,8 +651,48 @@ const tabDefs=[
   {id:"diagnosis",label:"Locate"}
 
 ];
-function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
+function TabBar({active,onChange,bp}){
+  const compact = !bp.isDesktop;
 
+  return (
+    <div style={{
+      display:"flex",
+      gap:6,
+      background:c.surface,
+      border:`1px solid ${c.borderS}`,
+      borderRadius:16,
+      padding:6,
+      flexWrap:"wrap",
+      justifyContent:"center"
+    }}>
+      {tabDefs.map(t=>(
+        <button
+          key={t.id}
+          onClick={()=>onChange(t.id)}
+          title={t.label}
+          style={{
+            ...f.mono,
+            fontSize:compact?11:12,
+            letterSpacing:"0.045em",
+            padding:compact?"10px 12px":"12px 18px",
+            minWidth:compact?"auto":96,
+            borderRadius:12,
+            border:"none",
+            background:active===t.id?c.text:"transparent",
+            color:active===t.id?c.bg:c.dim,
+            cursor:"pointer",
+            transition:"all 0.25s",
+            flex:compact?"1 1 30%":"0 1 auto",
+            lineHeight:1.15,
+            whiteSpace:"normal"
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 // ── STATE MAP ─────────────────────────────────────────────────────
 
 function StateMap({activeState,onSelect,bp}){

@@ -363,6 +363,256 @@ function buildRoutePath(pts){if(!pts.length)return"";if(pts.length===1)return`M 
 function buildDemonPositions(){const by={};Object.values(states).forEach(s=>{by[s.id]=demonGraph.filter(d=>d.state===s.id);});const pos={};Object.values(states).forEach(s=>{const c=by[s.id]||[];const r=s.id==="liminal"?88:76;c.forEach((d,i)=>{const a=(Math.PI*2/Math.max(c.length,1))*i-Math.PI/2;pos[d.id]={x:s.x+Math.cos(a)*r,y:s.y+Math.sin(a)*r+40};});});return pos;}
 function getNetSpanFromMesh(m){const n=Number(m);if(isNaN(n))return"—";if(n===0)return"1::0";if(n<=2)return`2::${n-1}`;if(n<=5)return`3::${n-3}`;if(n<=9)return`4::${n-6}`;if(n<=14)return`5::${n-10}`;if(n<=20)return`6::${n-15}`;if(n<=27)return`7::${n-21}`;if(n<=35)return`8::${n-28}`;return`9::${n-36}`;}
 
+function getDemonRouteEntries(demonName){
+  return (routeOracle[demonName] || []).map(route => ({
+    demon:demonName,
+    code:route.code,
+    title:route.title,
+    text:route.text,
+    mesh:demons[demonName]?.mesh || "—",
+    state:demonGraph.find(x=>x.id===demonName)?.state || "—"
+  }));
+}
+
+function getDemonStateInfo(demonName){
+  const gr=demonGraph.find(x=>x.id===demonName);
+  const st=gr ? states[gr.state] : null;
+
+  return {
+    demon:demonName,
+    mesh:demons[demonName]?.mesh || "—",
+    state:gr?.state || "—",
+    stateName:st?.name || "—",
+    color:st?.color || c.dim,
+    role:demons[demonName]?.role || "—",
+    note:demons[demonName]?.note || "—"
+  };
+}
+
+function analyzeDemonChain(chain){
+  const demonsInChain=(chain || []).filter(Boolean);
+  const routeEntries=demonsInChain.flatMap(getDemonRouteEntries);
+  const codes=routeEntries.map(r=>r.code).filter(code=>code && code !== "X" && code !== "?");
+  const stateFlow=demonsInChain.map(getDemonStateInfo);
+
+  const fragmentCounts={};
+  codes.forEach(code=>{
+    getRouteFragments(code).forEach(frag=>{
+      fragmentCounts[frag]=(fragmentCounts[frag] || 0) + 1;
+    });
+  });
+
+  const sharedFragments=Object.entries(fragmentCounts)
+    .filter(([frag,count])=>count >= 2)
+    .map(([frag,count])=>({
+      frag,
+      count,
+      demons:getAllRouteEntries().filter(e=>e.code===frag)
+    }))
+    .sort((a,b)=>b.frag.length-a.frag.length || b.count-a.count);
+
+  const terminalCounts={};
+  codes.forEach(code=>{
+    const clean=String(code).replace(/[^0-9]/g,"");
+    for(let i=2;i<=clean.length;i++){
+      const terminal=clean.slice(-i);
+      terminalCounts[terminal]=(terminalCounts[terminal] || 0) + 1;
+    }
+  });
+
+  const sharedTerminals=Object.entries(terminalCounts)
+    .filter(([terminal,count])=>count >= 2)
+    .map(([terminal,count])=>({terminal,count}))
+    .sort((a,b)=>b.terminal.length-a.terminal.length || b.count-a.count);
+
+  const primaryKernel=sharedTerminals[0]?.terminal || sharedFragments[0]?.frag || "";
+  const stateNames=stateFlow.map(x=>x.stateName).filter(x=>x && x !== "—");
+
+  return {
+    demons:demonsInChain,
+    routeEntries,
+    codes,
+    stateFlow,
+    sharedFragments,
+    sharedTerminals,
+    primaryKernel,
+    stateSentence:stateNames.join(" → ")
+  };
+}
+
+function makeChainExport(name,analysis){
+  const title=name?.trim() || "Untitled Chain";
+  const chain=analysis.demons.join(" → ");
+
+  const routes=analysis.routeEntries.length
+    ? analysis.routeEntries.map(r=>`${r.demon} — ${r.code} — ${r.title}`).join("\n")
+    : "No registered route entries.";
+
+  const states=analysis.stateFlow.length
+    ? analysis.stateFlow.map(x=>`${x.demon} — ${x.stateName}`).join("\n")
+    : "No state-flow.";
+
+  const shared=analysis.sharedFragments.length
+    ? analysis.sharedFragments.slice(0,10).map(x=>`${x.frag} (${x.count} hits)`).join("\n")
+    : "No shared fragments.";
+
+  const terminals=analysis.sharedTerminals.length
+    ? analysis.sharedTerminals.slice(0,10).map(x=>`${x.terminal} (${x.count} hits)`).join("\n")
+    : "No shared terminal kernels.";
+
+  return `CHAIN: ${title}
+
+DEMON SENTENCE:
+${chain || "—"}
+
+ROUTE STACK:
+${routes}
+
+STATE-FLOW:
+${states}
+
+PRIMARY KERNEL:
+${analysis.primaryKernel || "—"}
+
+SHARED FRAGMENTS:
+${shared}
+
+SHARED TERMINALS:
+${terminals}
+
+DIRTY READING:
+${chain || "This chain"} moves through ${analysis.stateSentence || "unregistered state-flow"}. ${analysis.primaryKernel ? `Its primary shared kernel is ${analysis.primaryKernel}.` : "No dominant shared kernel has been detected yet."}`;
+}
+const GRIMOIRE_STORAGE_KEY="synchronisation_atlas_grimoire_v1";
+
+function loadSavedReadings(){
+  try{
+    const raw=localStorage.getItem(GRIMOIRE_STORAGE_KEY);
+    if(!raw) return [];
+    const parsed=JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function saveReadingsToStorage(readings){
+  try{
+    localStorage.setItem(GRIMOIRE_STORAGE_KEY,JSON.stringify(readings));
+  }catch(e){
+    console.warn("Could not save grimoire readings",e);
+  }
+}
+
+function createSavedReading({name,chain,tags,notes,analysis}){
+  return {
+    id:`reading_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString(),
+    name:name?.trim() || "Untitled Reading",
+    chain:[...(chain || [])],
+    tags:[...(tags || [])].map(t=>String(t).trim()).filter(Boolean),
+    notes:notes || "",
+    routeEntries:analysis?.routeEntries || [],
+    stateFlow:analysis?.stateFlow || [],
+    primaryKernel:analysis?.primaryKernel || "",
+    sharedFragments:analysis?.sharedFragments || [],
+    sharedTerminals:analysis?.sharedTerminals || [],
+    exportText:makeChainExport(name,analysis)
+  };
+}
+
+function parseTagsInput(input){
+  return String(input || "")
+    .split(",")
+    .map(x=>x.trim())
+    .filter(Boolean);
+}
+
+function uniqueTagsFromReadings(readings){
+  return Array.from(new Set(readings.flatMap(r=>r.tags || []))).sort((a,b)=>a.localeCompare(b));
+}
+
+function analyzeSavedPatterns(readings){
+  const kernelCounts={};
+  const fragmentCounts={};
+  const demonCounts={};
+  const stateCounts={};
+  const stateEndingCounts={};
+  const tagCounts={};
+  const routeCounts={};
+
+  readings.forEach(r=>{
+    if(r.primaryKernel){
+      kernelCounts[r.primaryKernel]=(kernelCounts[r.primaryKernel] || 0)+1;
+    }
+
+    (r.sharedFragments || []).forEach(f=>{
+      if(f.frag) fragmentCounts[f.frag]=(fragmentCounts[f.frag] || 0)+1;
+    });
+
+    (r.chain || []).forEach(d=>{
+      demonCounts[d]=(demonCounts[d] || 0)+1;
+    });
+
+    (r.stateFlow || []).forEach(s=>{
+      if(s.stateName && s.stateName !== "—"){
+        stateCounts[s.stateName]=(stateCounts[s.stateName] || 0)+1;
+      }
+    });
+
+    const ending=(r.stateFlow || []).slice(-3).map(s=>s.stateName).filter(Boolean).join(" → ");
+    if(ending){
+      stateEndingCounts[ending]=(stateEndingCounts[ending] || 0)+1;
+    }
+
+    (r.tags || []).forEach(t=>{
+      tagCounts[t]=(tagCounts[t] || 0)+1;
+    });
+
+    (r.routeEntries || []).forEach(e=>{
+      if(e.code && e.code !== "X" && e.code !== "?"){
+        const key=`${e.code} · ${e.demon}`;
+        routeCounts[key]=(routeCounts[key] || 0)+1;
+      }
+    });
+  });
+
+  function sorted(obj){
+    return Object.entries(obj)
+      .map(([name,count])=>({name,count}))
+      .sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name));
+  }
+
+  return {
+    kernels:sorted(kernelCounts),
+    fragments:sorted(fragmentCounts),
+    demons:sorted(demonCounts),
+    states:sorted(stateCounts),
+    endings:sorted(stateEndingCounts),
+    tags:sorted(tagCounts),
+    routes:sorted(routeCounts)
+  };
+}
+
+function readingMatchesSearch(reading,query,tagFilter){
+  const q=normalizeName(query || "");
+  const tagOk=!tagFilter || tagFilter==="all" || (reading.tags || []).includes(tagFilter);
+  if(!tagOk) return false;
+  if(!q) return true;
+
+  const hay=[
+    reading.name,
+    reading.notes,
+    reading.primaryKernel,
+    ...(reading.chain || []),
+    ...(reading.tags || []),
+    ...(reading.routeEntries || []).flatMap(e=>[e.demon,e.code,e.title,e.text]),
+    ...(reading.stateFlow || []).flatMap(s=>[s.demon,s.stateName])
+  ].join(" ").toLowerCase();
+
+  return hay.includes(q);
+}
 // ── STYLE SYSTEM ──────────────────────────────────────────────────
 
 const fontUrl="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap";
@@ -382,12 +632,25 @@ function InnerPanel({children,style:s}){return<div style={{background:c.bg,borde
 // ── TAB BAR ───────────────────────────────────────────────────────
 
 const tabDefs=[
+
   {id:"atlas",label:"States"},
+
   {id:"demons",label:"Demons"},
+
   {id:"routes",label:"Routes"},
+
   {id:"cipher",label:"Cipher Lab"},
+
   {id:"compare",label:"Compare Lab"},
+
+  {id:"chain",label:"Chain Builder"},
+
+  {id:"grimoire",label:"Grimoire"},
+
+  {id:"patterns",label:"Patterns"},
+
   {id:"diagnosis",label:"Locate"}
+
 ];
 function TabBar({active,onChange,bp}){return<div style={{display:"flex",gap:2,background:c.surface,border:`1px solid ${c.borderS}`,borderRadius:14,padding:4,flexWrap:bp.isMobile?"wrap":"nowrap"}}>{tabDefs.map(t=><button key={t.id}onClick={()=>onChange(t.id)}style={{...f.mono,fontSize:bp.isMobile?12:13,letterSpacing:"0.06em",padding:bp.isMobile?"10px 16px":"14px 28px",borderRadius:11,border:"none",background:active===t.id?c.text:"transparent",color:active===t.id?c.bg:c.dim,cursor:"pointer",transition:"all 0.25s",flex:bp.isMobile?"1 1 40%":1}}>{t.label}</button>)}</div>;}
 
@@ -1163,6 +1426,477 @@ function CompareLab({bp}){
     </div>
   );
 }
+function ChainBuilder({bp}){
+  const allDemonNames=Object.keys(demons).sort((a,b)=>{
+    const am=Number(demons[a]?.mesh ?? 999);
+    const bm=Number(demons[b]?.mesh ?? 999);
+    return am-bm;
+  });
+
+  const [chain,setChain]=useState(["Tokhatto","Puppo","Uttunul","Lurgo"]);
+  const [selected,setSelected]=useState("Tokhatto");
+  const [chainName,setChainName]=useState("Tokhatto Descent with Lurgo Seed");
+  const [copied,setCopied]=useState(false);
+
+  const analysis=useMemo(()=>analyzeDemonChain(chain),[chain]);
+  const pad=bp.isMobile?18:28;
+
+  const firstNumericCode=analysis.codes[0] || "";
+  const pts=parseRouteCode(firstNumericCode);
+  const path=buildRoutePath(pts);
+
+  function addDemon(name){
+    setChain(prev=>[...prev,name]);
+  }
+
+  function removeAt(index){
+    setChain(prev=>prev.filter((_,i)=>i!==index));
+  }
+
+  function move(index,dir){
+    setChain(prev=>{
+      const next=[...prev];
+      const ni=index+dir;
+      if(ni<0 || ni>=next.length) return prev;
+      [next[index],next[ni]]=[next[ni],next[index]];
+      return next;
+    });
+  }
+
+  async function copyExport(){
+    const text=makeChainExport(chainName,analysis);
+    try{
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(()=>setCopied(false),1400);
+    }catch(e){
+      setCopied(false);
+    }
+  }
+
+  function ChainRouteCard({entry}){
+    const st=states[entry.state];
+    return (
+      <InnerPanel style={{marginTop:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+          <div>
+            <Label>Mesh {entry.mesh} · Route [{entry.code}]</Label>
+            <div style={{...f.serif,fontSize:21,color:c.text,marginTop:7}}>
+              {entry.demon}
+            </div>
+            <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:5}}>
+              {entry.title}
+            </div>
+          </div>
+          {st && (
+            <div style={{
+              width:9,
+              height:9,
+              borderRadius:"50%",
+              background:st.color,
+              boxShadow:`0 0 16px ${st.color}55`,
+              marginTop:5,
+              flexShrink:0
+            }}/>
+          )}
+        </div>
+        <div style={{...f.monoLight,fontSize:13,color:c.muted,marginTop:10,lineHeight:1.7}}>
+          {entry.text}
+        </div>
+      </InnerPanel>
+    );
+  }
+
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:bp.isDesktop?"620px 1fr":"1fr",
+      gap:20,
+      alignItems:"start"
+    }}>
+      <Panel>
+        <div style={{padding:`${pad}px ${pad}px ${pad*0.6}px`}}>
+          <div style={{...f.serif,fontSize:bp.isMobile?26:28,color:c.text}}>
+            Chain Builder
+          </div>
+          <div style={{...f.monoLight,fontSize:14,color:c.dim,marginTop:8,lineHeight:1.7}}>
+            Compose demon-process sentences. Build a chain, reveal route stack, state-flow, shared kernels, and copy the reading.
+          </div>
+        </div>
+
+        <div style={{padding:`0 ${pad}px ${pad}px`}}>
+          <Section label="Name">
+            <input
+              value={chainName}
+              onChange={e=>setChainName(e.target.value)}
+              placeholder="Name this chain"
+              style={{
+                ...f.mono,
+                fontSize:14,
+                width:"100%",
+                padding:"14px 16px",
+                borderRadius:14,
+                border:`1px solid ${c.border}`,
+                background:c.bg,
+                color:c.text,
+                outline:"none",
+                marginTop:8
+              }}
+            />
+          </Section>
+
+          <Section label="Add demon" style={{marginTop:22}}>
+            <div style={{display:"grid",gridTemplateColumns:bp.isMobile?"1fr":"1fr auto",gap:10,marginTop:8}}>
+              <select
+                value={selected}
+                onChange={e=>setSelected(e.target.value)}
+                style={{
+                  ...f.mono,
+                  fontSize:14,
+                  padding:"12px 14px",
+                  borderRadius:12,
+                  border:`1px solid ${c.border}`,
+                  background:c.bg,
+                  color:c.text,
+                  outline:"none"
+                }}
+              >
+                {allDemonNames.map(name=>(
+                  <option key={name} value={name}>
+                    {demons[name]?.mesh} · {name}
+                  </option>
+                ))}
+              </select>
+
+              <Pill active onClick={()=>addDemon(selected)}>
+                Add
+              </Pill>
+            </div>
+          </Section>
+
+          <Section label="Current chain" style={{marginTop:24}}>
+            <div style={{display:"grid",gap:8,marginTop:10}}>
+              {chain.length ? chain.map((name,i)=>{
+                const info=getDemonStateInfo(name);
+                return (
+                  <div key={`${name}-${i}`} style={{
+                    display:"grid",
+                    gridTemplateColumns:bp.isMobile?"1fr":"auto 1fr auto",
+                    alignItems:"center",
+                    gap:10,
+                    background:c.bg,
+                    border:`1px solid ${c.borderS}`,
+                    borderRadius:14,
+                    padding:"12px 14px"
+                  }}>
+                    <div style={{
+                      ...f.mono,
+                      fontSize:11,
+                      width:34,
+                      height:34,
+                      borderRadius:10,
+                      display:"flex",
+                      alignItems:"center",
+                      justifyContent:"center",
+                      background:info.color,
+                      color:c.bg
+                    }}>
+                      {info.mesh}
+                    </div>
+
+                    <div>
+                      <div style={{...f.serif,fontSize:20,color:c.text}}>
+                        {name}
+                      </div>
+                      <div style={{...f.monoLight,fontSize:12,color:c.dim,marginTop:3}}>
+                        {info.stateName} · {info.role}
+                      </div>
+                    </div>
+
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button
+                        onClick={()=>move(i,-1)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.muted,
+                          cursor:"pointer"
+                        }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={()=>move(i,1)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.muted,
+                          cursor:"pointer"
+                        }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={()=>removeAt(i)}
+                        style={{
+                          ...f.mono,
+                          fontSize:11,
+                          padding:"7px 9px",
+                          borderRadius:9,
+                          border:`1px solid ${c.border}`,
+                          background:"transparent",
+                          color:c.dim,
+                          cursor:"pointer"
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <InnerPanel>
+                  <Mono style={{fontSize:13}}>No demons in chain yet.</Mono>
+                </InnerPanel>
+              )}
+            </div>
+
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:14}}>
+              <Pill onClick={()=>setChain([])}>Clear</Pill>
+              <Pill onClick={()=>setChain(["Tokhatto","Puppo","Uttunul","Lurgo"])}>
+                Deep route
+              </Pill>
+              <Pill onClick={()=>setChain(["Tokhatto","Tchu","Ixix","Duoddod","Lurgo"])}>
+                Warp shortcut
+              </Pill>
+              <Pill onClick={()=>setChain(["Tokhatto","Krako","Katak","Ummnu","Muntuk","Numko","Sukugool","Ixigool","Lurgo"])}>
+                Ordeal route
+              </Pill>
+            </div>
+          </Section>
+
+          <Section label="First numeric route preview" style={{marginTop:24}}>
+            <svg
+              viewBox="0 0 1000 2050"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                width:"100%",
+                display:"block",
+                borderRadius:14,
+                background:"#000000",
+                marginTop:10
+              }}
+            >
+              <image
+                href="/Numogram-blackgreen.jpg"
+                x="50"
+                y="50"
+                width="900"
+                height="1950"
+                preserveAspectRatio="xMidYMid meet"
+              />
+
+              {path && (
+                <>
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#FF6B1A"
+                    strokeWidth={22}
+                    strokeLinecap="round"
+                    strokeOpacity={0.18}
+                  />
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#FF8838"
+                    strokeWidth={5}
+                    strokeLinecap="round"
+                    strokeDasharray="11 9"
+                    strokeOpacity={0.95}
+                  />
+                </>
+              )}
+
+              {pts.map((pt,i)=>(
+                <g key={`${pt.digit}-${i}`}>
+                  <circle cx={pt.x} cy={pt.y} r={13} fill="#FF8838" stroke="#FFFFFF" strokeWidth={2}/>
+                  <text
+                    x={pt.x}
+                    y={pt.y+5}
+                    textAnchor="middle"
+                    fontSize={13}
+                    fill="#0C0C0B"
+                    style={{...f.mono,fontWeight:600}}
+                  >
+                    {pt.digit}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </Section>
+        </div>
+      </Panel>
+
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        <Panel>
+          <div style={{padding:pad}}>
+            <Label>Demon sentence</Label>
+            <div style={{...f.serif,fontSize:bp.isMobile?26:34,color:c.text,marginTop:10,lineHeight:1.25}}>
+              {chain.length ? chain.join(" → ") : "—"}
+            </div>
+
+            <div style={{marginTop:18}}>
+              <Label>Primary shared kernel</Label>
+              <div style={{...f.serif,fontSize:34,color:c.text,marginTop:6}}>
+                {analysis.primaryKernel || "—"}
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}>
+              <Pill active onClick={copyExport}>
+                {copied ? "Copied" : "Copy reading"}
+              </Pill>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="State-flow">
+              {analysis.stateFlow.length ? (
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                  {analysis.stateFlow.map((x,i)=>(
+                    <div key={`${x.demon}-${i}`} style={{
+                      display:"flex",
+                      alignItems:"center",
+                      gap:8,
+                      flexWrap:"wrap"
+                    }}>
+                      <span style={{
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        border:`1px solid ${c.border}`,
+                        borderRadius:10,
+                        color:c.muted,
+                        background:c.bg
+                      }}>
+                        {x.demon}
+                      </span>
+                      <span style={{
+                        ...f.mono,
+                        fontSize:11,
+                        padding:"7px 10px",
+                        borderRadius:10,
+                        color:c.bg,
+                        background:x.color
+                      }}>
+                        {x.stateName}
+                      </span>
+                      {i < analysis.stateFlow.length-1 && (
+                        <span style={{...f.mono,color:c.dim,fontSize:12}}>→</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <InnerPanel><Mono style={{fontSize:13}}>No state-flow yet.</Mono></InnerPanel>
+              )}
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="Route stack">
+              {analysis.routeEntries.length ? (
+                analysis.routeEntries.map((entry,i)=>(
+                  <ChainRouteCard key={`${entry.demon}-${entry.code}-${i}`} entry={entry}/>
+                ))
+              ) : (
+                <InnerPanel><Mono style={{fontSize:13}}>No route stack yet.</Mono></InnerPanel>
+              )}
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Section label="Shared fragments">
+              {analysis.sharedFragments.length ? (
+                analysis.sharedFragments.slice(0,16).map(item=>(
+                  <InnerPanel key={item.frag} style={{marginTop:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+                      <div>
+                        <Label>Fragment · {item.count} hits</Label>
+                        <div style={{...f.serif,fontSize:26,color:c.text,marginTop:6}}>
+                          {item.frag}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10}}>
+                      {item.demons.length ? item.demons.map(e=>(
+                        <Pill key={`${item.frag}-${e.demon}`}>
+                          {e.demon}
+                        </Pill>
+                      )) : (
+                        <Mono style={{fontSize:12}}>Unregistered fragment</Mono>
+                      )}
+                    </div>
+                  </InnerPanel>
+                ))
+              ) : (
+                <InnerPanel><Mono style={{fontSize:13}}>No repeated fragments yet.</Mono></InnerPanel>
+              )}
+            </Section>
+
+            <Section label="Shared terminal kernels" style={{marginTop:24}}>
+              {analysis.sharedTerminals.length ? (
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:10}}>
+                  {analysis.sharedTerminals.slice(0,16).map(x=>(
+                    <Pill key={x.terminal} active>
+                      {x.terminal} · {x.count}
+                    </Pill>
+                  ))}
+                </div>
+              ) : (
+                <InnerPanel><Mono style={{fontSize:13}}>No shared terminal kernels yet.</Mono></InnerPanel>
+              )}
+            </Section>
+          </div>
+        </Panel>
+
+        <Panel>
+          <div style={{padding:pad}}>
+            <Label>Dirty reading</Label>
+            <div style={{...f.monoLight,fontSize:14,color:c.muted,marginTop:12,lineHeight:1.8}}>
+              {chain.length ? (
+                <>
+                  This chain moves through <span style={{color:c.text}}>{analysis.stateSentence || "unregistered state-flow"}</span>.
+                  {analysis.primaryKernel
+                    ? <> Its primary shared kernel is <span style={{color:c.text}}>{analysis.primaryKernel}</span>, so read the sequence as different demons carrying or transforming the same buried route-pressure.</>
+                    : <> No dominant shared kernel has appeared yet, so read this as a looser process-sentence rather than a tight route-family.</>
+                  }
+                </>
+              ) : (
+                <>Build a chain to generate a reading.</>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
 // ── DIAGNOSIS WORKBENCH ───────────────────────────────────────────
 
 function DiagnosisWorkbench({onJump,onOpenDemon,bp}){
@@ -1269,10 +2003,11 @@ const mainGrid=bp.isDesktop?"1.1fr 0.9fr":"1fr";
 </div>
       </div>}
 
-      {activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
-      {activeTab==="cipher"&&<CipherLab bp={bp}/>}
-      {activeTab==="compare"&&<CompareLab bp={bp}/>}
-      {activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
+     {activeTab==="routes"&&<NumogramRoutesLab bp={bp}/>}
+{activeTab==="cipher"&&<CipherLab bp={bp}/>}
+{activeTab==="compare"&&<CompareLab bp={bp}/>}
+{activeTab==="chain"&&<ChainBuilder bp={bp}/>}
+{activeTab==="diagnosis"&&<DiagnosisWorkbench onJump={id=>{setActiveState(id);setActiveTab("atlas");}}onOpenDemon={d=>{setActiveDemon(d);setActiveTab("demons");}}bp={bp}/>}
 
       <div style={{marginTop:bp.isMobile?40:72,paddingTop:24,borderTop:`1px solid ${c.borderS}`,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}><Mono style={{fontSize:11,color:c.dim}}>Synchronisation Atlas · Pooh Sticks</Mono><Mono style={{fontSize:11,color:c.dim}}>{footerSignals[footerIndex]}</Mono></div>
     </div>
